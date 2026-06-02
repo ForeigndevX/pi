@@ -1,9 +1,0 @@
-[Unit]
-Description=Scheduled Wake-on-LAN for gaming PC
-After=network-online.target
-
-[Service]
-Type=oneshot
-User=foreigndev
-EnvironmentFile=-/home/foreigndev/wolapp/.env
-ExecStart=/bin/bash -lc "MAC=$(tr -d '[:space:]' < /home/foreigndev/wolapp/last_mac.cache 2>/dev/null); if [ -z \"$MAC\" ]; then MAC=\"${PC_MAC:-}\"; fi; if [ -z \"$MAC\" ]; then echo No MAC; exit 1; fi; exec /usr/bin/wakeonlan \"$MAC\""

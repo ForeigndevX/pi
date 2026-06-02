@@ -1,11 +1,3 @@
-# Secrets and local state
-.env
-.env.*
-!.env.example
-!env.ntfy.example
-data/
-__pycache__/
-*.pyc
-.RCraspberry*
-*RCraspberry*
-schedules.json
+# Local-only; this repo holds public static assets only
+.DS_Store
+Thumbs.db
