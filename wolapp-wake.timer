@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily WoL wake at 08:00 (edit OnCalendar to change)
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+Unit=wolapp-wake.service
+
+[Install]
+WantedBy=timers.target

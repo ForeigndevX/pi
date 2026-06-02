@@ -1,0 +1,3906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WOLAPP">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<title>HOME CONTROL >>> TERMINAL</title>
+<style>
+  :root {
+    --bg: #000000;
+    --text: #cccccc;
+    --text-dim: #888888;
+    --text-muted: #777777;
+    --panel: #1a1a1a;
+    --border: #333333;
+    --accent: #aaaaaa;
+    --good: #9a9a9a;
+    --warn: #bbbbbb;
+    --bad: #888888;
+    --bar-lit: #cccccc;
+    --bar-dim: #333333;
+    --scanline: rgba(255, 255, 255, 0.04);
+    --vignette: rgba(0, 0, 0, 0.55);
+    --font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", "IBM Plex Mono", "Share Tech Mono", Menlo, Consolas, monospace;
+    --bar-samples: 20;
+    --bar-gap: 2px;
+    --bar-max-h: 28px;
+    --ls-header: 0.12em;
+    --ls-label: 0.08em;
+    --phosphor: 0 0 8px rgba(204, 204, 204, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+    position: relative;
+    animation: crt-flicker 5s ease-in-out infinite;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      var(--scanline) 2px,
+      var(--scanline) 4px
+    );
+    background-size: 100% 4px;
+    animation: scan-drift 10s linear infinite;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9997;
+    background: radial-gradient(ellipse at center, transparent 50%, var(--vignette) 100%);
+  }
+
+  @keyframes scan-drift {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 12px; }
+  }
+
+  @keyframes crt-flicker {
+    0%, 92%, 100% { opacity: 1; }
+    94% { opacity: 0.98; }
+    96% { opacity: 1; }
+  }
+
+  @keyframes online-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(154, 154, 154, 0); }
+    50% { box-shadow: 0 0 10px 1px rgba(154, 154, 154, 0.25); }
+  }
+
+  @keyframes boot-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes cursor-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  @keyframes colon-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.35; }
+  }
+
+  @keyframes btn-scan {
+    0% { box-shadow: inset -120% 0 0 transparent; }
+    40% { box-shadow: inset 0 0 0 1px rgba(204, 204, 204, 0.35); }
+    100% { box-shadow: inset 120% 0 0 transparent; }
+  }
+
+  body:not(.loaded) .boot-section {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  body.loaded .boot-section {
+    animation: boot-in 0.45s ease forwards;
+  }
+
+  body.loaded .col-left.boot-section { animation-delay: 0ms; }
+  body.loaded .col-center.boot-section { animation-delay: 60ms; }
+  body.loaded .col-right.boot-section { animation-delay: 120ms; }
+  body.loaded .boot-schedule.boot-section { animation-delay: 150ms; }
+  body.loaded .boot-pi.boot-section { animation-delay: 210ms; }
+  body.loaded .boot-term.boot-section { animation-delay: 270ms; }
+  body.loaded .boot-footer.boot-section { animation-delay: 330ms; }
+
+  .crt-noise,
+  .crt-scan-beam,
+  .crt-sync-flash,
+  .footer-hex-stream {
+    pointer-events: none;
+  }
+
+  .crt-noise {
+    position: fixed;
+    inset: 0;
+    z-index: 9996;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+    animation: noise-pan 24s linear infinite;
+  }
+
+  .crt-scan-beam {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 9995;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    animation: scan-beam 6s linear infinite;
+    opacity: 0.5;
+  }
+
+  .crt-sync-flash {
+    position: fixed;
+    inset: 0;
+    z-index: 9994;
+    background: #fff;
+    opacity: 0;
+    animation: sync-pop 30s ease-in-out infinite;
+  }
+
+  .footer-hex-stream {
+    width: 100%;
+    margin-top: 8px;
+    overflow: hidden;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+    line-height: 1.25;
+    text-align: left;
+  }
+
+  .footer-hex-inner {
+    display: inline-block;
+    color: #555;
+    opacity: 0.15;
+    animation: hex-scroll 48s linear infinite;
+  }
+
+  .hud {
+    max-width: 1480px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    transform-origin: center top;
+  }
+
+  body.fx-paused .crt-noise,
+  body.fx-paused .crt-scan-beam,
+  body.fx-paused .crt-sync-flash,
+  body.fx-paused .footer-hex-inner,
+  body.fx-paused .hud {
+    animation-play-state: paused !important;
+  }
+
+  .hud-header {
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+
+  .hud-title {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: var(--ls-header);
+    text-transform: uppercase;
+    color: var(--text);
+    text-shadow: var(--phosphor);
+    line-height: 1.35;
+    position: relative;
+    display: inline-block;
+  }
+
+  .hud-title .title-main {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hud-title .title-scramble-target {
+    display: inline-block;
+    min-width: 14ch;
+  }
+
+  .status-bracket.offline {
+    animation: offline-static 0.12s step-end infinite;
+  }
+
+  .hud-header.stale-data .hud-title,
+  .hud-header.stale-data .hud-sub {
+    animation: stale-flash 0.8s step-end infinite;
+  }
+
+  .hud.metrics-dim .col-center,
+  .hud.metrics-dim .boot-pi,
+  .hud.metrics-dim .boot-schedule,
+  .hud.metrics-dim .col-right .mem-compact {
+    opacity: 0.55;
+    filter: saturate(0.7);
+    transition: opacity 0.3s, filter 0.3s;
+  }
+
+  #stale-badge {
+    display: none;
+    margin-left: 8px;
+    color: var(--warn);
+    letter-spacing: 0.1em;
+  }
+
+  .hud-header.stale-data #stale-badge { display: inline; }
+
+  .bar-segment.fill-seq {
+    animation: bar-fill-seq 0.35s ease forwards;
+  }
+
+  .world-clock-row {
+    position: relative;
+    overflow: hidden;
+  }
+
+  button.btn-busy {
+    letter-spacing: 0.06em;
+    opacity: 0.65;
+  }
+
+  .hud-title .sep { color: var(--text-dim); margin: 0 6px; }
+
+  .hud-sub {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .hud-sub > #last-update {
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    line-height: 1;
+  }
+
+  .header-controls label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: var(--ls-label);
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .header-controls select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    height: 26px;
+    line-height: 1.2;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+
+  .header-controls #ts-meta {
+    font-size: 11px;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hud-main {
+    margin-bottom: 20px;
+  }
+
+  .hud-grid {
+    display: grid;
+    grid-template-columns: minmax(200px, 240px) 1fr minmax(200px, 220px);
+    gap: 20px 24px;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  .col-center-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 100%;
+  }
+
+  .col-center-stack .card:last-child {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+
+  .col-center-stack .card:last-child .actions {
+    margin-top: auto;
+  }
+
+  .col-right-compact .block {
+    margin-bottom: 12px;
+  }
+
+  .col-right-compact .block:last-child {
+    margin-bottom: 0;
+  }
+
+  .mem-compact .char-bar-label {
+    margin-bottom: 4px;
+  }
+
+  .mem-compact-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mem-compact-row .bar-track {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mem-compact-row .bar-chart {
+    height: 18px;
+    --bar-max-h: 18px;
+  }
+
+  .mem-compact-pct {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5ch;
+    text-align: right;
+  }
+
+  .block {
+    margin-bottom: 16px;
+  }
+
+  .block-title {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: var(--ls-header);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    text-shadow: var(--phosphor);
+  }
+
+  .chip,
+  .panel-chip {
+    background: var(--panel);
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .chip-lg {
+    font-size: 22px;
+    letter-spacing: 0.06em;
+    padding: 10px 12px;
+  }
+
+  .chip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .chip-tag {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  .spark-label,
+  .char-bar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-label);
+  }
+
+  .bar-track {
+    background: var(--panel);
+    padding: 4px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .bar-chart {
+    display: grid;
+    grid-template-columns: repeat(var(--bar-samples), 1fr);
+    gap: var(--bar-gap);
+    align-items: end;
+    height: var(--bar-max-h);
+    min-width: 0;
+  }
+
+  .bar-segment {
+    background: var(--bar-dim);
+    height: 2px;
+    min-height: 2px;
+    max-height: var(--bar-max-h);
+    align-self: end;
+    transition: height 0.4s ease, background-color 0.3s ease;
+  }
+
+  .bar-segment.lit {
+    background: var(--bar-lit);
+  }
+
+  .bar-segment.warn.lit { background: var(--warn); }
+  .bar-segment.bad.lit { background: var(--text-muted); }
+  .bar-segment.good.lit { background: var(--text); }
+
+  .card {
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: transparent;
+  }
+
+  .card-title {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-header);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .card-title span:first-child { text-shadow: var(--phosphor); }
+  .card-title::before { content: ">>> "; color: var(--text-muted); }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    gap: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .row:first-of-type { border-top: none; padding-top: 0; }
+  .row + .row { }
+
+  .label {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-label);
+    flex-shrink: 0;
+  }
+
+  .value {
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .row-value-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .copy-btn {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-dim);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .copy-btn:hover {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
+  }
+
+  .status-bracket {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--panel);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    font-weight: 400;
+  }
+
+  .status-bracket.online {
+    color: var(--text);
+    text-shadow: 0 0 12px rgba(204, 204, 204, 0.45), 0 0 24px rgba(204, 204, 204, 0.15);
+    animation: online-pulse 2.2s ease-in-out infinite, online-phosphor 2.2s ease-in-out infinite;
+  }
+  .status-bracket.offline { color: var(--text-dim); }
+
+  .ms {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-left: 8px;
+    font-weight: 400;
+  }
+
+  .presence {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .svc-list { margin-bottom: 14px; }
+
+  .svc-line {
+    display: flex;
+    align-items: baseline;
+    font-size: 11px;
+    padding: 3px 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .svc-name { flex-shrink: 0; color: var(--text-dim); min-width: 7ch; }
+  .svc-dots { flex: 1; overflow: hidden; color: var(--text-muted); white-space: nowrap; }
+  .svc-status { flex-shrink: 0; color: var(--text-dim); }
+  .svc-status.active { color: var(--text); }
+
+  .spark-wrap { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .actions .btn-wide { grid-column: 1 / -1; }
+
+  button {
+    width: 100%;
+    padding: 14px 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 400;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  button:hover:not(:disabled) {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+    box-shadow: 0 0 12px rgba(204, 204, 204, 0.2);
+    animation: btn-scan 0.35s ease;
+  }
+
+  button:active:not(:disabled) { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button:focus-visible, a:focus-visible, select:focus-visible {
+    outline: 1px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  .btn-wake { }
+
+  .device-picker {
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 8px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+
+  .device-scan-wrap {
+    margin-top: 8px;
+    max-height: 180px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    background: #0a0a0a;
+  }
+
+  .device-scan-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .device-scan-table th,
+  .device-scan-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .device-scan-table th {
+    color: var(--text-muted);
+    font-weight: normal;
+    position: sticky;
+    top: 0;
+    background: #111;
+  }
+
+  .device-scan-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .device-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.35;
+  }
+  .btn-restart { }
+  .btn-shutdown { }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    transform: translateY(120%);
+    transition: transform 0.3s;
+    z-index: 10000;
+  }
+
+  .toast.show { transform: translateY(0); }
+
+  .pi-headline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .stat { }
+  .stat-val {
+    font-size: 18px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    background: var(--panel);
+    padding: 8px 10px;
+    letter-spacing: 0.04em;
+  }
+
+  .stat-val.good { color: var(--text); }
+  .stat-val.warn { color: var(--warn); }
+  .stat-val.bad { color: var(--text-dim); }
+
+  .stat-lbl {
+    color: var(--text-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-label);
+    margin-top: 6px;
+  }
+
+  .stat .bar-track {
+    margin-top: 6px;
+    border: none;
+    padding: 3px;
+    background: var(--panel);
+  }
+
+  .stat .bar-chart {
+    height: 14px;
+    --bar-max-h: 14px;
+  }
+
+  .pi-details .row:first-child { border-top: 1px solid var(--border); margin-top: 8px; }
+
+  .term-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .term-card { padding: 0; overflow: hidden; }
+
+  .term-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-header);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .term-header .open-link {
+    color: var(--text);
+    text-decoration: none;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .term-header .open-link:hover { text-decoration: underline; }
+
+  .term-load-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    width: auto;
+  }
+
+  .term-load-btn:hover {
+    background: var(--text);
+    color: var(--bg);
+  }
+
+  .term-wrap { overflow: hidden; position: relative; min-height: 120px; }
+
+  .term-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0 8px;
+    text-align: center;
+  }
+
+  .term-cursor::after {
+    content: "_";
+    animation: cursor-blink 1s step-end infinite;
+    margin-left: 1px;
+  }
+
+  .clock-colon { animation: colon-blink 1s step-end infinite; }
+
+  .term {
+    width: calc(100% + 18px);
+    height: 460px;
+    border: none;
+    display: none;
+    background: #000;
+  }
+
+  .term.loaded { display: block; }
+  .term-placeholder.hidden { display: none; }
+
+  footer.app-footer {
+    text-align: center;
+    padding: 16px 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .footer-trivia {
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20000;
+    padding: 16px;
+  }
+
+  .modal-backdrop.show { display: flex; }
+
+  .modal {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 20px 22px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+  }
+
+  .modal h2 {
+    font-size: 12px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-header);
+    margin-bottom: 10px;
+  }
+
+  .modal h2::before { content: "[ "; color: var(--text-muted); }
+  .modal h2::after { content: " ]"; color: var(--text-muted); }
+
+  .modal p {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+
+  .modal input {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+
+  .modal input::placeholder { color: var(--text-muted); text-transform: uppercase; font-size: 11px; }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .modal-actions button { flex: 1; padding: 10px; font-size: 11px; }
+
+  .block-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .block-title-row .block-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+    flex: 1;
+  }
+
+  .block-title-btn {
+    flex-shrink: 0;
+    width: auto;
+    padding: 3px 8px;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+  }
+
+  .block-title-btn:hover:not(:disabled) {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+    animation: none;
+  }
+
+  .world-clocks-scroll {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .world-clocks-scroll.scrollable {
+    max-height: 11.5rem;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .world-clock-row {
+    background: #1a1a1a;
+    margin-bottom: 6px;
+  }
+
+  .world-clock-row:last-child { margin-bottom: 0; }
+
+  .world-clock-time {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+
+  .modal.modal-wide {
+    max-width: 520px;
+    max-height: min(90vh, 640px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .clock-config-search {
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .clock-config-search::placeholder {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .clock-config-warn {
+    font-size: 10px;
+    color: var(--warn);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: none;
+  }
+
+  .clock-config-warn.show { display: block; }
+
+  .clock-config-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    margin-bottom: 10px;
+  }
+
+  .clock-config-panel {
+    border: 1px solid var(--border);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .clock-config-panel-hd {
+    padding: 6px 8px;
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-label);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .clock-config-list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 120px;
+    max-height: 220px;
+  }
+
+  .clock-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 10px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .clock-config-item:last-child { border-bottom: none; }
+
+  .clock-config-item-meta {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .clock-config-item-tag {
+    color: var(--text-muted);
+    font-size: 9px;
+  }
+
+  .clock-config-mini {
+    flex-shrink: 0;
+    width: auto;
+    padding: 2px 6px;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+  }
+
+  .clock-config-mini:hover:not(:disabled) {
+    background: var(--text);
+    color: var(--bg);
+    animation: none;
+  }
+
+  .clock-config-mini:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .clock-config-selected .clock-config-item {
+    flex-wrap: wrap;
+  }
+
+  .clock-config-selected-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .clock-config-label-inp {
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 9px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+  }
+
+  .clock-config-empty {
+    padding: 12px 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .schedule-panel {
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    background: transparent;
+  }
+
+  .schedule-panel > .block-title {
+    margin-bottom: 12px;
+  }
+
+  .schedule-panel-inner {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.15fr) minmax(280px, 1fr);
+    gap: 20px 28px;
+    align-items: start;
+  }
+
+  .schedule-cal-col {
+    min-width: 0;
+  }
+
+  .schedule-side-col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .schedule-panel .sched-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .schedule-panel .sched-month-label {
+    font-size: 11px;
+    letter-spacing: var(--ls-label);
+    color: var(--text);
+    text-transform: uppercase;
+    flex: 1;
+    text-align: center;
+  }
+
+  .sched-mini {
+    width: auto;
+    flex-shrink: 0;
+    padding: 5px 10px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+
+  .sched-cal {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .sched-cal-hd {
+    color: #aaaaaa;
+    padding: 4px 0;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    opacity: 1;
+  }
+
+  .sched-cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: #e0e0e0;
+    min-height: 28px;
+    min-width: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sched-cal-day.other-month { opacity: 1; }
+  .sched-cal-day.other-month .sched-cal-day-num { color: #888888; }
+  .sched-cal-day[data-date] {
+    cursor: pointer;
+  }
+  .sched-cal-day[data-date]:hover:not(.selected) {
+    border-color: var(--accent);
+  }
+  .sched-cal-day[data-date]:hover:not(.selected) .sched-cal-day-num {
+    color: #ffffff;
+  }
+  .sched-cal-day-num {
+    color: #e0e0e0;
+  }
+  .sched-cal-day.today {
+    border-color: #ffffff;
+    box-shadow: inset 0 0 0 1px #ffffff;
+  }
+  .sched-cal-day.today .sched-cal-day-num {
+    color: #ffffff;
+  }
+  .sched-cal-day.selected {
+    color: #e0e0e0;
+    background: #2a2a2a;
+    border-color: #cccccc;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    opacity: 1;
+  }
+  .sched-cal-day.selected .sched-cal-day-num {
+    color: #ffffff;
+  }
+  .sched-cal-day.selected.other-month .sched-cal-day-num {
+    color: #dddddd;
+  }
+  .sched-cal-day.today.selected {
+    border-color: #ffffff;
+    box-shadow: inset 0 0 0 1px #ffffff;
+  }
+  .sched-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .sched-date-label-hit {
+    display: block;
+    padding: 8px 0;
+    margin: -4px 0;
+    cursor: pointer;
+  }
+  .sched-time-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    grid-column: 1 / -1;
+    margin-top: 2px;
+  }
+  .sched-time-presets .sched-mini {
+    flex: 1;
+    min-width: 3.5rem;
+    padding: 4px 6px;
+  }
+  .sched-textarea {
+    min-height: 2.8em;
+    resize: vertical;
+    text-transform: none;
+  }
+  .sched-textarea::placeholder {
+    text-transform: uppercase;
+  }
+  .sched-item-clickable {
+    cursor: pointer;
+  }
+  .sched-item-clickable:hover {
+    border: 1px solid var(--border);
+    margin: -1px;
+  }
+  .sched-item-desc {
+    flex: 1 1 100%;
+    color: #999999;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+    opacity: 1;
+  }
+  .sched-saved-flash {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.2s;
+    min-height: 1.2em;
+  }
+  .sched-saved-flash.show {
+    opacity: 1;
+  }
+
+  .sched-cal-day {
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px 1px 3px;
+    font-size: 10px;
+  }
+  .sched-cal-day-num {
+    line-height: 1.1;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .sched-cal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    min-height: 5px;
+    max-width: 100%;
+    padding: 0 2px;
+  }
+  .sched-cal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sched-cal-dot.cat-general { background: var(--text); }
+  .sched-cal-dot.cat-girlfriend { background: #bb8888; }
+  .sched-cal-dot.cat-family { background: #88aabb; }
+  .sched-cal-dot.cat-work { background: #8899bb; }
+  .sched-cal-dot.cat-health { background: #88bb99; }
+  .sched-cal-dot.cat-other { background: #999999; }
+  .sched-cal-dot.cat-holiday {
+    width: 6px;
+    height: 6px;
+    background: #c9a227;
+    box-shadow: 0 0 4px rgba(201, 162, 39, 0.75);
+  }
+  .sched-cal-day.selected .sched-cal-dot.cat-holiday,
+  .sched-cal-day.today .sched-cal-dot.cat-holiday {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 5px rgba(201, 162, 39, 0.9);
+  }
+  .sched-cal-day-detail {
+    margin-top: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+    color: #cccccc;
+    background: #111111;
+    border: 1px solid var(--border);
+    min-height: 2.4em;
+  }
+  .sched-cal-day-detail:empty {
+    display: none;
+  }
+  .sched-cal-day-detail .sched-cal-day-detail-holiday {
+    color: #e8d48a;
+  }
+  .sched-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    color: #cccccc;
+    text-transform: uppercase;
+  }
+  .sched-cal-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .sched-cal-legend i {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    font-style: normal;
+  }
+  .sched-cal-legend i.legend-holiday { background: #c9a227; }
+  .sched-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .sched-filter-row .sched-mini {
+    color: #aaaaaa;
+  }
+  .sched-filter-row .sched-mini.active {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
+  }
+  .sched-quick-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    grid-column: 1 / -1;
+  }
+  .sched-notify-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    grid-column: 1 / -1;
+  }
+  .sched-notify-chip {
+    padding: 4px 8px;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+  }
+  .sched-notify-chip.active {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
+  }
+  .sched-tag {
+    font-size: 8px;
+    padding: 1px 4px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+  }
+  .sched-tag.tag-gf { color: #bb8888; border-color: #665555; }
+  .sched-tag.tag-fam { color: #88aabb; }
+  .sched-tag.tag-work { color: #8899bb; }
+  .sched-tag.tag-health { color: #88bb99; }
+
+  .sched-upcoming-hd {
+    font-size: 10px;
+    color: #aaaaaa;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    margin-bottom: 0;
+  }
+
+  .sched-upcoming-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .sched-upcoming-list {
+    max-height: 11rem;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .sched-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 6px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: var(--panel);
+    font-size: 10px;
+  }
+
+  .sched-item:last-child { margin-bottom: 0; }
+
+  .sched-item-meta {
+    flex: 1 1 100%;
+    color: #aaaaaa;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+
+  .sched-item-title { color: #eeeeee; }
+
+  .sched-item-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .sched-form {
+    display: grid;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  .sched-field {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) 1fr;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .sched-field-full {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .sched-label {
+    font-size: 10px;
+    color: #aaaaaa;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .sched-field-full .sched-label {
+    margin-bottom: 0;
+  }
+
+  .sched-input,
+  .sched-form select {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    background: #111111;
+    color: #eeeeee;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .sched-input {
+    text-transform: uppercase;
+  }
+
+  .sched-input::placeholder {
+    color: #888888;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .sched-form select {
+    text-transform: uppercase;
+    cursor: pointer;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+      linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+
+  .sched-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sched-time-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .sched-form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .sched-form-actions button {
+    padding: 10px 8px;
+    font-size: 10px;
+  }
+
+  .sched-empty {
+    font-size: 10px;
+    color: #aaaaaa;
+    padding: 14px 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin: 0;
+  }
+
+  .modal.modal-wide .modal-actions { flex-wrap: wrap; }
+  .modal.modal-wide .modal-actions button { min-width: calc(50% - 5px); }
+
+  @media (max-width: 520px) {
+    .clock-config-panels { grid-template-columns: 1fr; }
+    .clock-config-list { max-height: 160px; }
+  }
+
+  .good { color: var(--text); }
+  .bad { color: var(--text-dim); }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+
+  @media (max-width: 960px) {
+    .hud-grid {
+      grid-template-columns: 1fr;
+    }
+    .col-left, .col-right {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .col-left .block, .col-right .block { margin-bottom: 0; }
+    .col-center-stack .card:last-child {
+      flex: none;
+    }
+    .schedule-panel-inner {
+      grid-template-columns: 1fr;
+    }
+    .sched-cal-day {
+      min-height: 32px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .col-left, .col-right { grid-template-columns: 1fr; }
+    .col-right-compact {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .col-right-compact .block { margin-bottom: 0; }
+    .pi-headline { grid-template-columns: repeat(2, 1fr); }
+    .term-grid { grid-template-columns: 1fr; }
+    .term { height: 360px; }
+    .actions { gap: 8px; }
+    .hud-sub { flex-direction: column; align-items: flex-start; }
+    .header-controls { width: 100%; }
+    .sched-form-row,
+    .sched-form-actions {
+      grid-template-columns: 1fr;
+    }
+    .sched-field {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes noise-pan {
+      0% { background-position: 0 0; }
+      100% { background-position: 180px 90px; }
+    }
+    @keyframes scan-beam {
+      0% { top: -2%; opacity: 0; }
+      8% { opacity: 0.5; }
+      92% { opacity: 0.5; }
+      100% { top: 102%; opacity: 0; }
+    }
+    @keyframes sync-pop {
+      0%, 96%, 100% { opacity: 0; }
+      97% { opacity: 0.02; }
+      98% { opacity: 0; }
+    }
+    @keyframes hex-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes title-rgb-hover {
+      0%, 100% { text-shadow: var(--phosphor); }
+      50% { text-shadow: -1px 0 rgba(255,80,80,0.35), 1px 0 rgba(80,220,255,0.35), var(--phosphor); }
+    }
+    @keyframes header-glitch {
+      0%, 100% { transform: translate(0); clip-path: inset(0 0 0 0); }
+      20% { transform: translate(-2px, 1px); clip-path: inset(12% 0 58% 0); }
+      40% { transform: translate(2px, -1px); clip-path: inset(48% 0 8% 0); }
+      60% { transform: translate(-1px, 0); clip-path: inset(72% 0 4% 0); }
+    }
+    @keyframes offline-static {
+      0%, 100% { border: 1px solid var(--border); transform: translate(0); }
+      50% { border-color: var(--text-muted); transform: translate(0.5px, -0.5px); }
+    }
+    @keyframes stale-flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+    @keyframes online-phosphor {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.15); }
+    }
+    @keyframes bar-fill-seq {
+      from { filter: brightness(1.8); }
+      to { filter: brightness(1); }
+    }
+    @keyframes clock-row-scan {
+      0% { box-shadow: inset -100% 0 0 transparent; }
+      100% { box-shadow: inset 100% 0 0 rgba(204,204,204,0.08); }
+    }
+    @keyframes vhs-wobble {
+      0%, 100% { transform: perspective(1200px) rotateX(0.35deg) translateY(0); }
+      50% { transform: perspective(1200px) rotateX(0.35deg) translateY(1px); }
+    }
+    @keyframes btn-glitch-shadow {
+      0%, 100% { text-shadow: none; }
+      50% { text-shadow: 2px 0 var(--text-dim), -2px 0 var(--text-muted); }
+    }
+
+    .hud-title .title-main:hover {
+      animation: title-rgb-hover 0.35s ease;
+    }
+
+    .hud-title .title-main::before,
+    .hud-title .title-main::after {
+      content: attr(data-text);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .hud-title .title-main:hover::before {
+      opacity: 0.55;
+      color: rgba(255, 90, 90, 0.85);
+      transform: translate(-1px, 0);
+      clip-path: inset(0 45% 0 0);
+    }
+
+    .hud-title .title-main:hover::after {
+      opacity: 0.55;
+      color: rgba(90, 220, 255, 0.85);
+      transform: translate(1px, 0);
+      clip-path: inset(0 0 0 55%);
+    }
+
+    .block-title.glitch-active,
+    .card-title.glitch-active {
+      animation: header-glitch 0.2s steps(2) 1;
+    }
+
+    .hud.crt-barrel {
+      transform: perspective(1200px) rotateX(0.35deg);
+    }
+
+    .hud.vhs-wobble-active {
+      animation: vhs-wobble 0.3s ease-in-out 1;
+    }
+
+    button:hover:not(:disabled) {
+      animation: btn-scan 0.35s ease, btn-glitch-shadow 0.08s steps(1) 1;
+    }
+
+    .world-clock-row:hover {
+      animation: clock-row-scan 0.45s ease forwards;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .footer-hex-stream {
+      display: none;
+    }
+
+    body,
+    body::before,
+    .crt-noise,
+    .crt-scan-beam,
+    .crt-sync-flash,
+    .footer-hex-inner,
+    .status-bracket.online,
+    .status-bracket.offline,
+    .term-cursor::after,
+    .clock-colon,
+    button:hover:not(:disabled),
+    .hud.vhs-wobble-active,
+    .block-title.glitch-active,
+    .card-title.glitch-active {
+      animation: none !important;
+    }
+    body.loaded .boot-section {
+      animation: none !important;
+      opacity: 1;
+      transform: none;
+    }
+    .bar-segment { transition: none; }
+    .hud.crt-barrel { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="crt-noise" aria-hidden="true"></div>
+<div class="crt-scan-beam" aria-hidden="true"></div>
+<div class="crt-sync-flash" aria-hidden="true"></div>
+<div class="hud crt-barrel" id="hud-root">
+  <header class="hud-header" id="hud-header">
+    <div class="hud-title">
+      <span class="title-main title-scramble-target" id="title-scramble" data-text="SYSTEM OVERVIEW">SYSTEM OVERVIEW</span>
+      <span class="sep">&gt;&gt;&gt;</span> HOME CONTROL <span class="sep">|</span> TERMINAL WALLPAPER <span class="sep">|</span> WOLAPP
+    </div>
+    <div class="hud-sub">
+      <span id="last-update">CONNECTING...</span>
+      <span id="stale-badge">[ STALE ]</span>
+      <div class="header-controls">
+        <label for="poll-interval" title="Full /api/status poll interval">STATUS POLL</label>
+        <select id="poll-interval" aria-label="Status poll interval">
+          <option value="3000">3S</option>
+          <option value="5000" selected>5S (DEFAULT)</option>
+          <option value="10000">10S</option>
+          <option value="15000">15S</option>
+          <option value="30000">30S</option>
+        </select>
+        <span id="ts-meta"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="hud-main">
+  <div class="hud-grid">
+    <aside class="col-left boot-section">
+      <div class="block">
+        <div class="block-title">LOCAL TIME</div>
+        <div class="chip chip-lg panel-chip" id="clock-time">--:--:--</div>
+        <div class="chip chip-row">
+          <span id="clock-date">---- -- --</span>
+          <span class="chip-tag" id="clock-day">[---]</span>
+        </div>
+      </div>
+      <div class="block" id="world-clocks-block">
+        <div class="block-title-row">
+          <div class="block-title">WORLD CLOCK</div>
+          <button type="button" class="block-title-btn" id="world-clocks-config-btn" aria-label="Configure world clocks">[ CLOCKS ]</button>
+        </div>
+        <div class="world-clocks-scroll" id="world-clocks-scroll">
+          <div id="world-clocks"></div>
+        </div>
+      </div>
+      <div class="block">
+        <div class="char-bar-label">LINK PROCESS</div>
+        <div class="bar-track"><div class="bar-chart" id="pc-link-bar" role="img" aria-label="Link process"></div></div>
+      </div>
+    </aside>
+
+    <main class="col-center col-center-stack boot-section">
+      <div class="card">
+        <div class="card-title"><span id="device-card-title">MAIN PC</span></div>
+        <select class="device-picker panel-chip" id="device-picker" aria-label="Select WoL device"></select>
+        <div class="row" style="border-top:none;padding-top:0">
+          <span class="label">STATUS</span>
+          <div style="text-align:right">
+            <span class="status-bracket offline" id="pc-bracket">[ OFFLINE ]</span>
+            <span class="ms" id="pc-latency"></span>
+            <div class="presence" id="pc-presence"></div>
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">IP</span>
+          <div class="row-value-wrap">
+            <span class="mono" id="pc-ip">--</span>
+            <button type="button" class="copy-btn" data-copy="pc-ip" aria-label="Copy IP">[ CPY ]</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">MAC</span>
+          <div class="row-value-wrap">
+            <span class="mono" id="pc-mac">--</span>
+            <button type="button" class="copy-btn" data-copy="pc-mac" aria-label="Copy MAC">[ CPY ]</button>
+          </div>
+        </div>
+        <div class="spark-wrap">
+          <div class="spark-label">LATENCY | LAST 20 SAMPLES</div>
+          <div class="bar-track"><div class="bar-chart" id="latency-spark" role="img" aria-label="Latency history"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">REMOTE ACTIONS</div>
+        <div class="actions">
+          <button class="btn-wake" id="btn-device-wake" onclick="wakeSelectedDevice(this)">[ WAKE ]</button>
+          <button class="btn-restart" id="btn-device-restart" onclick="action('restart', this, true)">[ RESTART ]</button>
+          <button class="btn-shutdown btn-wide" id="btn-device-shutdown" onclick="action('shutdown', this, true)">[ SHUTDOWN ]</button>
+        </div>
+        <p class="device-hint" id="device-action-hint">SSH shutdown/restart applies to the primary PC only. WoL works for any saved device with a valid MAC.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">LAN DISCOVERY</div>
+        <div class="device-scan-actions">
+          <button type="button" class="sched-mini" id="btn-lan-scan">[ SCAN LAN ]</button>
+        </div>
+        <p class="device-hint">Scan finds active IP/MAC on your /24. It does not detect WoL — add a device, confirm MAC, then test wake (BIOS WoL + NIC enabled).</p>
+        <div class="device-scan-wrap" id="device-scan-wrap" hidden>
+          <table class="device-scan-table">
+            <thead>
+              <tr><th>IP</th><th>MAC</th><th>NAME</th><th></th></tr>
+            </thead>
+            <tbody id="device-scan-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <aside class="col-right col-right-compact boot-section">
+      <div class="block">
+        <div class="block-title" id="countdown-title">[ NEXT YEAR ]</div>
+        <div class="chip chip-lg panel-chip" id="countdown-value">---</div>
+        <div class="chip panel-chip" id="countdown-sub">---</div>
+      </div>
+      <div class="block mem-compact">
+        <div class="char-bar-label">MEM PROCESS</div>
+        <div class="mem-compact-row">
+          <div class="bar-track"><div class="bar-chart" id="pi-mem-bar-chars" role="img" aria-label="Memory process"></div></div>
+          <span class="mem-compact-pct" id="pi-mem-inline">--</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="schedule-panel boot-section boot-schedule" aria-labelledby="schedule-panel-title">
+    <div class="block-title" id="schedule-panel-title">SCHEDULE | CALENDAR</div>
+    <div class="schedule-panel-inner">
+      <div class="schedule-cal-col">
+        <div class="sched-nav">
+          <div class="sched-nav-actions">
+            <button type="button" class="sched-mini" id="sched-prev" aria-label="Previous month">[ &lt; ]</button>
+            <button type="button" class="sched-mini" id="sched-today" aria-label="Go to today">[ TODAY ]</button>
+          </div>
+          <span class="sched-month-label" id="sched-month-label">---</span>
+          <div class="sched-nav-actions">
+            <button type="button" class="sched-mini" id="sched-next" aria-label="Next month">[ &gt; ]</button>
+          </div>
+        </div>
+        <div class="sched-filter-row" role="group" aria-label="Calendar filter">
+          <button type="button" class="sched-mini sched-filter active" data-filter="all">[ ALL ]</button>
+          <button type="button" class="sched-mini sched-filter" data-filter="holidays">[ HOLIDAYS ]</button>
+          <button type="button" class="sched-mini sched-filter" data-filter="mine">[ MINE ]</button>
+        </div>
+        <div class="sched-cal" id="sched-cal-grid" aria-label="Month calendar"></div>
+        <div class="sched-cal-day-detail" id="sched-cal-day-detail" aria-live="polite"></div>
+        <div class="sched-cal-legend" aria-hidden="false">
+          <span><i class="legend-holiday"></i> HOLIDAY</span>
+          <span><i class="cat-girlfriend sched-cal-dot"></i> GIRLFRIEND</span>
+          <span><i class="cat-family sched-cal-dot"></i> FAMILY</span>
+          <span><i class="cat-work sched-cal-dot"></i> WORK</span>
+        </div>
+      </div>
+      <div class="schedule-side-col">
+        <div class="sched-upcoming-wrap">
+          <div class="sched-upcoming-hd">UPCOMING</div>
+          <div class="sched-upcoming-list" id="sched-upcoming-list"></div>
+        </div>
+        <form class="sched-form" id="sched-form">
+          <div class="sched-field sched-field-full">
+            <label class="sched-label" for="sched-title">[ TITLE ]</label>
+            <input type="text" class="sched-input panel-chip" id="sched-title" placeholder="EVENT TITLE" maxlength="200" required autocomplete="off">
+          </div>
+          <div class="sched-field sched-field-full">
+            <label class="sched-label" for="sched-description">[ DESCRIPTION ]</label>
+            <textarea class="sched-input sched-textarea panel-chip" id="sched-description" rows="2" maxlength="500" placeholder="OPTIONAL — NOTES FOR NOTIFY" autocomplete="off"></textarea>
+          </div>
+          <div class="sched-form-row sched-date-time-row">
+            <div class="sched-field">
+              <label class="sched-label sched-date-label-hit" for="sched-date">[ DATE ]</label>
+              <input type="date" class="sched-input panel-chip" id="sched-date" required>
+            </div>
+            <div class="sched-field sched-time-field">
+              <label class="sched-label" for="sched-time">[ TIME ]</label>
+              <input type="time" class="sched-input panel-chip" id="sched-time" required>
+              <div class="sched-time-presets" role="group" aria-label="Time presets">
+                <button type="button" class="sched-mini sched-time-preset" data-time="08:00">[ 08:00 ]</button>
+                <button type="button" class="sched-mini sched-time-preset" data-time="12:00">[ 12:00 ]</button>
+                <button type="button" class="sched-mini sched-time-preset" data-time="18:00">[ 18:00 ]</button>
+                <button type="button" class="sched-mini sched-time-preset" data-time="21:00">[ 21:00 ]</button>
+              </div>
+            </div>
+          </div>
+          <div class="sched-quick-row" role="group" aria-label="Quick add">
+            <button type="button" class="sched-mini" id="sched-tpl-anniversary">[ + ANNIVERSARY ]</button>
+            <button type="button" class="sched-mini" id="sched-tpl-birthday">[ + BIRTHDAY ]</button>
+            <button type="button" class="sched-mini" id="sched-tpl-reminder">[ + REMINDER ]</button>
+          </div>
+          <div class="sched-form-row">
+            <div class="sched-field">
+              <label class="sched-label" for="sched-category">[ CATEGORY ]</label>
+              <select class="sched-input" id="sched-category" aria-label="Category">
+                <option value="general">GENERAL</option>
+                <option value="girlfriend">GIRLFRIEND</option>
+                <option value="family">FAMILY</option>
+                <option value="work">WORK</option>
+                <option value="health">HEALTH</option>
+                <option value="other">OTHER</option>
+              </select>
+            </div>
+            <div class="sched-field">
+              <label class="sched-label" for="sched-repeat">[ REPEAT ]</label>
+              <select class="sched-input" id="sched-repeat" aria-label="Repeat">
+                <option value="none">NONE</option>
+                <option value="daily">DAILY</option>
+                <option value="weekly">WEEKLY</option>
+                <option value="monthly">MONTHLY</option>
+                <option value="yearly">YEARLY</option>
+                <option value="weekdays">WEEKDAYS</option>
+                <option value="weekends">WEEKENDS</option>
+                <option value="every_2_weeks">EVERY 2 WEEKS</option>
+                <option value="every_3_months">EVERY 3 MONTHS</option>
+              </select>
+            </div>
+          </div>
+          <div class="sched-form-row">
+            <div class="sched-field">
+              <label class="sched-label" for="sched-action">[ ACTION ]</label>
+              <select class="sched-input" id="sched-action" aria-label="Action">
+                <option value="notify">NOTIFY</option>
+                <option value="wake">WAKE PC</option>
+                <option value="both">BOTH</option>
+              </select>
+            </div>
+          </div>
+          <div class="sched-field sched-field-full">
+            <span class="sched-label">[ NOTIFY ]</span>
+            <div class="sched-notify-chips" id="sched-notify-chips" role="group" aria-label="Notify timing"></div>
+          </div>
+          <div class="sched-form-actions">
+            <button type="submit" id="sched-submit-btn">[ ADD ]</button>
+            <button type="button" id="sched-cancel-edit" hidden>[ CANCEL ]</button>
+            <button type="button" id="sched-test-notify">[ TEST NOTIFY ]</button>
+            <span class="sched-saved-flash" id="sched-saved-flash" aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="card boot-section boot-pi">
+    <div class="card-title">
+      <span>RASPBERRY PI</span>
+      <span class="mono" id="pi-uptime">UPTIME --</span>
+    </div>
+    <div class="svc-list" id="svc-pills" aria-label="Systemd services"></div>
+
+    <div class="pi-headline">
+      <div class="stat">
+        <div class="stat-val" id="pi-temp">--</div>
+        <div class="stat-lbl">CPU TEMP</div>
+        <div class="bar-track"><div class="bar-chart" id="pi-temp-bar"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="pi-load">--</div>
+        <div class="stat-lbl">LOAD 1M</div>
+        <div class="bar-track"><div class="bar-chart" id="pi-load-bar"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="pi-mem">--</div>
+        <div class="stat-lbl">MEMORY</div>
+        <div class="bar-track"><div class="bar-chart" id="pi-mem-bar"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="pi-disk">--</div>
+        <div class="stat-lbl">DISK</div>
+        <div class="bar-track"><div class="bar-chart" id="pi-disk-bar"></div></div>
+      </div>
+    </div>
+
+    <div class="pi-details">
+      <div class="row">
+        <span class="label">WIFI</span>
+        <span class="value" id="pi-wifi">--</span>
+      </div>
+      <div class="row">
+        <span class="label">NETWORK</span>
+        <span class="value mono" id="pi-net">--</span>
+      </div>
+      <div class="row" id="pi-swap-row" style="display:none">
+        <span class="label">SWAP</span>
+        <span class="value" id="pi-swap">--</span>
+      </div>
+      <div class="row">
+        <span class="label">TAILSCALE</span>
+        <span class="value" id="pi-ts">--</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="term-grid boot-section boot-term">
+    <div class="card term-card">
+      <div class="term-header">
+        <span>TTY | RASPBERRY PI [ROOT]</span>
+        <span>
+          <button type="button" class="term-load-btn" id="term-pi-load">[ OPEN ]</button>
+          <a class="open-link" id="term-pi-link" href="#" target="_blank" rel="noopener">[ TAB ]</a>
+        </span>
+      </div>
+      <div class="term-wrap">
+        <div class="term-placeholder term-cursor" id="term-pi-ph">&gt;&gt;&gt; CLICK [ OPEN ] TO LOAD</div>
+        <iframe class="term" id="term-pi" title="Pi terminal" scrolling="no"></iframe>
+      </div>
+    </div>
+    <div class="card term-card">
+      <div class="term-header">
+        <span>TTY | MAIN PC [SSH]</span>
+        <span>
+          <button type="button" class="term-load-btn" id="term-pc-load">[ OPEN ]</button>
+          <a class="open-link" id="term-pc-link" href="#" target="_blank" rel="noopener">[ TAB ]</a>
+        </span>
+      </div>
+      <div class="term-wrap">
+        <div class="term-placeholder term-cursor" id="term-pc-ph">&gt;&gt;&gt; CLICK [ OPEN ] TO LOAD</div>
+        <iframe class="term" id="term-pc" title="PC terminal" scrolling="no"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer boot-section boot-footer">
+    <div id="app-footer">—</div>
+    <div class="footer-trivia" id="footer-trivia">RES -- | CUR --</div>
+    <div class="footer-hex-stream" aria-hidden="true"><span class="footer-hex-inner" id="footer-hex-stream"></span></div>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="clock-config-modal" role="dialog" aria-labelledby="clock-config-title">
+  <div class="modal modal-wide">
+    <h2 id="clock-config-title">WORLD CLOCK CONFIG</h2>
+    <p>ADD TIMEZONES, REORDER, AND OVERRIDE LABELS. MAX 12 SHOWN ON HUD.</p>
+    <input type="search" class="clock-config-search" id="clock-config-search" placeholder="SEARCH CITY OR TAG..." autocomplete="off">
+    <div class="clock-config-warn" id="clock-config-warn">WARNING: MORE THAN 12 CLOCKS — ONLY FIRST 12 WILL DISPLAY</div>
+    <div class="clock-config-panels">
+      <div class="clock-config-panel">
+        <div class="clock-config-panel-hd">CATALOG</div>
+        <div class="clock-config-list" id="clock-catalog-list"></div>
+      </div>
+      <div class="clock-config-panel clock-config-selected">
+        <div class="clock-config-panel-hd">SELECTED (<span id="clock-selected-count">0</span>)</div>
+        <div class="clock-config-list" id="clock-selected-list"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="clock-config-save">[ SAVE ]</button>
+      <button type="button" id="clock-config-reset">[ RESET DEFAULTS ]</button>
+      <button type="button" id="clock-config-cancel">[ CANCEL ]</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* --- Terminal HUD config (edit here) --- */
+const COUNTDOWN_MODE = 'new_year'; /* 'new_year' | 'count_up_year' | 'uptime' */
+const LOCALE = 'en-GB';
+const WORLD_CLOCKS_KEY = 'wolapp_world_clocks';
+const WORLD_CLOCK_LABELS_KEY = 'wolapp_world_clock_labels';
+const MAX_WORLD_CLOCKS_DISPLAY = 12;
+const WORLD_CLOCK_SCROLL_THRESHOLD = 6;
+const DEFAULT_WORLD_CLOCK_IDS = [
+  'Europe/London',
+  'America/New_York',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'UTC',
+  'America/Los_Angeles'
+];
+
+/* Comprehensive IANA timezone catalog — grouped by region */
+const TIMEZONE_CATALOG = [
+  /* --- UTC --- */
+  { id: 'UTC', label: 'UTC', tag: 'UTC', tz: 'UTC' },
+  /* --- Americas --- */
+  { id: 'America/New_York', label: 'NYC', tag: 'NYC', tz: 'America/New_York' },
+  { id: 'America/Los_Angeles', label: 'LA', tag: 'LAX', tz: 'America/Los_Angeles' },
+  { id: 'America/Chicago', label: 'CHICAGO', tag: 'CHI', tz: 'America/Chicago' },
+  { id: 'America/Denver', label: 'DENVER', tag: 'DEN', tz: 'America/Denver' },
+  { id: 'America/Phoenix', label: 'PHOENIX', tag: 'PHX', tz: 'America/Phoenix' },
+  { id: 'America/Anchorage', label: 'ANCHORAGE', tag: 'ANC', tz: 'America/Anchorage' },
+  { id: 'America/Toronto', label: 'TORONTO', tag: 'TOR', tz: 'America/Toronto' },
+  { id: 'America/Vancouver', label: 'VANCOUVER', tag: 'YVR', tz: 'America/Vancouver' },
+  { id: 'America/Halifax', label: 'HALIFAX', tag: 'HAL', tz: 'America/Halifax' },
+  { id: 'America/Winnipeg', label: 'WINNIPEG', tag: 'WPG', tz: 'America/Winnipeg' },
+  { id: 'America/Edmonton', label: 'EDMONTON', tag: 'YEG', tz: 'America/Edmonton' },
+  { id: 'America/Mexico_City', label: 'MEXICO CITY', tag: 'MEX', tz: 'America/Mexico_City' },
+  { id: 'America/Bogota', label: 'BOGOTA', tag: 'BOG', tz: 'America/Bogota' },
+  { id: 'America/Lima', label: 'LIMA', tag: 'LIM', tz: 'America/Lima' },
+  { id: 'America/Santiago', label: 'SANTIAGO', tag: 'SCL', tz: 'America/Santiago' },
+  { id: 'America/Buenos_Aires', label: 'BUENOS AIRES', tag: 'BUE', tz: 'America/Argentina/Buenos_Aires' },
+  { id: 'America/Sao_Paulo', label: 'SAO PAULO', tag: 'SAO', tz: 'America/Sao_Paulo' },
+  { id: 'America/Caracas', label: 'CARACAS', tag: 'CCS', tz: 'America/Caracas' },
+  { id: 'America/Montevideo', label: 'MONTEVIDEO', tag: 'MVD', tz: 'America/Montevideo' },
+  { id: 'America/Guayaquil', label: 'GUAYAQUIL', tag: 'GYE', tz: 'America/Guayaquil' },
+  { id: 'America/Panama', label: 'PANAMA', tag: 'PTY', tz: 'America/Panama' },
+  { id: 'America/Costa_Rica', label: 'SAN JOSE', tag: 'SJO', tz: 'America/Costa_Rica' },
+  { id: 'America/Jamaica', label: 'KINGSTON', tag: 'KIN', tz: 'America/Jamaica' },
+  { id: 'America/Havana', label: 'HAVANA', tag: 'HAV', tz: 'America/Havana' },
+  { id: 'America/Guatemala', label: 'GUATEMALA', tag: 'GUA', tz: 'America/Guatemala' },
+  { id: 'America/El_Salvador', label: 'SAN SALVADOR', tag: 'SAL', tz: 'America/El_Salvador' },
+  /* --- Europe --- */
+  { id: 'Europe/London', label: 'LONDON', tag: 'LON', tz: 'Europe/London' },
+  { id: 'Europe/Paris', label: 'PARIS', tag: 'PAR', tz: 'Europe/Paris' },
+  { id: 'Europe/Berlin', label: 'BERLIN', tag: 'BER', tz: 'Europe/Berlin' },
+  { id: 'Europe/Madrid', label: 'MADRID', tag: 'MAD', tz: 'Europe/Madrid' },
+  { id: 'Europe/Rome', label: 'ROME', tag: 'ROM', tz: 'Europe/Rome' },
+  { id: 'Europe/Amsterdam', label: 'AMSTERDAM', tag: 'AMS', tz: 'Europe/Amsterdam' },
+  { id: 'Europe/Brussels', label: 'BRUSSELS', tag: 'BRU', tz: 'Europe/Brussels' },
+  { id: 'Europe/Vienna', label: 'VIENNA', tag: 'VIE', tz: 'Europe/Vienna' },
+  { id: 'Europe/Zurich', label: 'ZURICH', tag: 'ZRH', tz: 'Europe/Zurich' },
+  { id: 'Europe/Stockholm', label: 'STOCKHOLM', tag: 'STO', tz: 'Europe/Stockholm' },
+  { id: 'Europe/Oslo', label: 'OSLO', tag: 'OSL', tz: 'Europe/Oslo' },
+  { id: 'Europe/Copenhagen', label: 'COPENHAGEN', tag: 'CPH', tz: 'Europe/Copenhagen' },
+  { id: 'Europe/Helsinki', label: 'HELSINKI', tag: 'HEL', tz: 'Europe/Helsinki' },
+  { id: 'Europe/Warsaw', label: 'WARSAW', tag: 'WAW', tz: 'Europe/Warsaw' },
+  { id: 'Europe/Prague', label: 'PRAGUE', tag: 'PRG', tz: 'Europe/Prague' },
+  { id: 'Europe/Budapest', label: 'BUDAPEST', tag: 'BUD', tz: 'Europe/Budapest' },
+  { id: 'Europe/Athens', label: 'ATHENS', tag: 'ATH', tz: 'Europe/Athens' },
+  { id: 'Europe/Bucharest', label: 'BUCHAREST', tag: 'BUH', tz: 'Europe/Bucharest' },
+  { id: 'Europe/Dublin', label: 'DUBLIN', tag: 'DUB', tz: 'Europe/Dublin' },
+  { id: 'Europe/Lisbon', label: 'LISBON', tag: 'LIS', tz: 'Europe/Lisbon' },
+  { id: 'Europe/Belgrade', label: 'BELGRADE', tag: 'BEG', tz: 'Europe/Belgrade' },
+  { id: 'Europe/Istanbul', label: 'ISTANBUL', tag: 'IST', tz: 'Europe/Istanbul' },
+  { id: 'Europe/Moscow', label: 'MOSCOW', tag: 'MOW', tz: 'Europe/Moscow' },
+  { id: 'Europe/Kyiv', label: 'KYIV', tag: 'IEV', tz: 'Europe/Kyiv' },
+  { id: 'Atlantic/Reykjavik', label: 'REYKJAVIK', tag: 'REK', tz: 'Atlantic/Reykjavik' },
+  /* --- Africa --- */
+  { id: 'Africa/Cairo', label: 'CAIRO', tag: 'CAI', tz: 'Africa/Cairo' },
+  { id: 'Africa/Johannesburg', label: 'JOHANNESBURG', tag: 'JNB', tz: 'Africa/Johannesburg' },
+  { id: 'Africa/Lagos', label: 'LAGOS', tag: 'LOS', tz: 'Africa/Lagos' },
+  { id: 'Africa/Nairobi', label: 'NAIROBI', tag: 'NBO', tz: 'Africa/Nairobi' },
+  { id: 'Africa/Casablanca', label: 'CASABLANCA', tag: 'CAS', tz: 'Africa/Casablanca' },
+  { id: 'Africa/Addis_Ababa', label: 'ADDIS ABABA', tag: 'ADD', tz: 'Africa/Addis_Ababa' },
+  { id: 'Africa/Tunis', label: 'TUNIS', tag: 'TUN', tz: 'Africa/Tunis' },
+  { id: 'Africa/Algiers', label: 'ALGIERS', tag: 'ALG', tz: 'Africa/Algiers' },
+  { id: 'Africa/Accra', label: 'ACCRA', tag: 'ACC', tz: 'Africa/Accra' },
+  { id: 'Africa/Khartoum', label: 'KHARTOUM', tag: 'KRT', tz: 'Africa/Khartoum' },
+  { id: 'Africa/Dar_es_Salaam', label: 'DAR ES SALAAM', tag: 'DAR', tz: 'Africa/Dar_es_Salaam' },
+  /* --- Asia --- */
+  { id: 'Asia/Dubai', label: 'DUBAI', tag: 'DXB', tz: 'Asia/Dubai' },
+  { id: 'Asia/Riyadh', label: 'RIYADH', tag: 'RUH', tz: 'Asia/Riyadh' },
+  { id: 'Asia/Tehran', label: 'TEHRAN', tag: 'THR', tz: 'Asia/Tehran' },
+  { id: 'Asia/Jerusalem', label: 'JERUSALEM', tag: 'TLV', tz: 'Asia/Jerusalem' },
+  { id: 'Asia/Baghdad', label: 'BAGHDAD', tag: 'BGW', tz: 'Asia/Baghdad' },
+  { id: 'Asia/Karachi', label: 'KARACHI', tag: 'KHI', tz: 'Asia/Karachi' },
+  { id: 'Asia/Kolkata', label: 'MUMBAI', tag: 'BOM', tz: 'Asia/Kolkata' },
+  { id: 'Asia/Dhaka', label: 'DHAKA', tag: 'DAC', tz: 'Asia/Dhaka' },
+  { id: 'Asia/Kathmandu', label: 'KATHMANDU', tag: 'KTM', tz: 'Asia/Kathmandu' },
+  { id: 'Asia/Tashkent', label: 'TASHKENT', tag: 'TAS', tz: 'Asia/Tashkent' },
+  { id: 'Asia/Almaty', label: 'ALMATY', tag: 'ALA', tz: 'Asia/Almaty' },
+  { id: 'Asia/Baku', label: 'BAKU', tag: 'BAK', tz: 'Asia/Baku' },
+  { id: 'Asia/Tbilisi', label: 'TBILISI', tag: 'TBS', tz: 'Asia/Tbilisi' },
+  { id: 'Asia/Yerevan', label: 'YEREVAN', tag: 'EVN', tz: 'Asia/Yerevan' },
+  { id: 'Asia/Bangkok', label: 'BANGKOK', tag: 'BKK', tz: 'Asia/Bangkok' },
+  { id: 'Asia/Ho_Chi_Minh', label: 'HO CHI MINH', tag: 'SGN', tz: 'Asia/Ho_Chi_Minh' },
+  { id: 'Asia/Jakarta', label: 'JAKARTA', tag: 'JKT', tz: 'Asia/Jakarta' },
+  { id: 'Asia/Singapore', label: 'SINGAPORE', tag: 'SIN', tz: 'Asia/Singapore' },
+  { id: 'Asia/Kuala_Lumpur', label: 'KUALA LUMPUR', tag: 'KUL', tz: 'Asia/Kuala_Lumpur' },
+  { id: 'Asia/Manila', label: 'MANILA', tag: 'MNL', tz: 'Asia/Manila' },
+  { id: 'Asia/Hong_Kong', label: 'HONG KONG', tag: 'HKG', tz: 'Asia/Hong_Kong' },
+  { id: 'Asia/Shanghai', label: 'SHANGHAI', tag: 'SHA', tz: 'Asia/Shanghai' },
+  { id: 'Asia/Taipei', label: 'TAIPEI', tag: 'TPE', tz: 'Asia/Taipei' },
+  { id: 'Asia/Seoul', label: 'SEOUL', tag: 'SEL', tz: 'Asia/Seoul' },
+  { id: 'Asia/Tokyo', label: 'TOKYO', tag: 'TYO', tz: 'Asia/Tokyo' },
+  { id: 'Asia/Yangon', label: 'YANGON', tag: 'RGN', tz: 'Asia/Yangon' },
+  { id: 'Asia/Colombo', label: 'COLOMBO', tag: 'CMB', tz: 'Asia/Colombo' },
+  { id: 'Asia/Ulaanbaatar', label: 'ULAANBAATAR', tag: 'ULN', tz: 'Asia/Ulaanbaatar' },
+  /* --- Pacific / Oceania --- */
+  { id: 'Australia/Perth', label: 'PERTH', tag: 'PER', tz: 'Australia/Perth' },
+  { id: 'Australia/Adelaide', label: 'ADELAIDE', tag: 'ADL', tz: 'Australia/Adelaide' },
+  { id: 'Australia/Brisbane', label: 'BRISBANE', tag: 'BNE', tz: 'Australia/Brisbane' },
+  { id: 'Australia/Sydney', label: 'SYDNEY', tag: 'SYD', tz: 'Australia/Sydney' },
+  { id: 'Australia/Melbourne', label: 'MELBOURNE', tag: 'MEL', tz: 'Australia/Melbourne' },
+  { id: 'Pacific/Auckland', label: 'AUCKLAND', tag: 'AKL', tz: 'Pacific/Auckland' },
+  { id: 'Pacific/Fiji', label: 'FIJI', tag: 'SUV', tz: 'Pacific/Fiji' },
+  { id: 'Pacific/Honolulu', label: 'HONOLULU', tag: 'HNL', tz: 'Pacific/Honolulu' },
+  { id: 'Pacific/Guam', label: 'GUAM', tag: 'GUM', tz: 'Pacific/Guam' },
+  { id: 'Pacific/Port_Moresby', label: 'PORT MORESBY', tag: 'POM', tz: 'Pacific/Port_Moresby' },
+  { id: 'Pacific/Tahiti', label: 'TAHITI', tag: 'PPT', tz: 'Pacific/Tahiti' },
+  { id: 'Pacific/Tongatapu', label: 'TONGA', tag: 'TBU', tz: 'Pacific/Tongatapu' },
+  { id: 'Pacific/Apia', label: 'APIA', tag: 'APW', tz: 'Pacific/Apia' },
+  { id: 'Pacific/Chatham', label: 'CHATHAM', tag: 'CHT', tz: 'Pacific/Chatham' }
+];
+
+const TIMEZONE_BY_ID = Object.fromEntries(TIMEZONE_CATALOG.map((e) => [e.id, e]));
+
+let worldClockIds = [];
+let worldClockLabels = {};
+let clockConfigDraftIds = [];
+let clockConfigDraftLabels = {};
+const BAR_MAX_HEIGHT = 28;
+
+const POLL_KEY = 'poll_interval_ms';
+const DEFAULT_POLL_MS = 5000;
+const HEALTH_POLL_MS = 10000;
+const FAST_TICK_MS = 1000;
+const latencySamples = [];
+const MAX_SAMPLES = 20;
+let statusPollTimer = null;
+let healthPollTimer = null;
+let lastPiMemoryPct = null;
+let lastPcOnline = false;
+let lastPcLatencyMs = null;
+let lastStatusOkAt = 0;
+let lastStatusAttemptAt = 0;
+let lastStatusOk = false;
+let statusFetchInFlight = false;
+let healthUptimeSec = null;
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<>|/[]';
+
+function $(id) { return document.getElementById(id); }
+
+function ensureBarSegments(container) {
+  if (container._segments) return container._segments;
+  container.innerHTML = '';
+  container.classList.add('bar-chart');
+  const segments = [];
+  for (let i = 0; i < MAX_SAMPLES; i++) {
+    const seg = document.createElement('div');
+    seg.className = 'bar-segment';
+    container.appendChild(seg);
+    segments.push(seg);
+  }
+  container._segments = segments;
+  return segments;
+}
+
+/** Vertical bar chart: values[] (sparkline) or { pct, cls } for threshold fill. */
+function renderBarChart(container, values, opts) {
+  opts = opts || {};
+  const segments = ensureBarSegments(container);
+  const maxH = opts.maxHeight || (container.closest('.stat') ? 14 : BAR_MAX_HEIGHT);
+  const levelCls = opts.levelCls || '';
+
+  if (opts.mode === 'threshold') {
+    const pct = values == null || isNaN(values) ? 0 : Math.min(100, Math.max(0, values));
+    const filled = Math.round(pct / 100 * MAX_SAMPLES);
+    for (let i = 0; i < MAX_SAMPLES; i++) {
+      const lit = i < filled;
+      const newH = lit ? maxH + 'px' : '2px';
+      const prevH = segments[i].style.height;
+      segments[i].style.height = newH;
+      segments[i].className = 'bar-segment' + (lit ? ' lit' : '') + (lit && levelCls ? ' ' + levelCls : '');
+      if (opts.animateFill && lit && prevH && prevH !== newH) {
+        segments[i].classList.add('fill-seq');
+        segments[i].addEventListener('animationend', () => segments[i].classList.remove('fill-seq'), { once: true });
+      }
+    }
+    return;
+  }
+
+  let vals = Array.isArray(values) ? values.slice(-MAX_SAMPLES) : [];
+  while (vals.length < MAX_SAMPLES) vals.unshift(null);
+  const numeric = vals.filter((v) => v != null && !isNaN(v));
+  const max = opts.max != null ? opts.max : (numeric.length ? Math.max(...numeric, 1) : 1);
+
+  for (let i = 0; i < MAX_SAMPLES; i++) {
+    const v = vals[i];
+    let h = 2;
+    let lit = false;
+    if (v != null && !isNaN(v)) {
+      lit = true;
+      h = Math.max(2, Math.round((v / max) * maxH));
+    }
+    const prevH = segments[i].style.height;
+    segments[i].style.height = h + 'px';
+    segments[i].className = 'bar-segment' + (lit ? ' lit' : '');
+    if (opts.animateFill && prevH && prevH !== segments[i].style.height && lit) {
+      segments[i].classList.add('fill-seq');
+      segments[i].addEventListener('animationend', () => segments[i].classList.remove('fill-seq'), { once: true });
+    }
+  }
+}
+
+function linkBarsFromSignal(online, latencyMs) {
+  if (!online) return 0;
+  if (latencyMs == null || isNaN(latencyMs)) return 8;
+  if (latencyMs < 20) return 20;
+  if (latencyMs < 50) return 15;
+  if (latencyMs < 100) return 12;
+  if (latencyMs < 200) return 8;
+  if (latencyMs < 500) return 5;
+  return 3;
+}
+
+function linkQualityPct(online, latencyMs) {
+  const bars = linkBarsFromSignal(online, latencyMs);
+  return Math.round((bars / MAX_SAMPLES) * 100);
+}
+
+function fmtBps(bps) {
+  if (bps == null) return '--';
+  if (bps < 1024) return bps + ' B/S';
+  if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/S';
+  return (bps / 1048576).toFixed(2) + ' MB/S';
+}
+
+function ago(ts) {
+  if (!ts) return null;
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (sec < 60) return sec + 'S AGO';
+  if (sec < 3600) return Math.floor(sec / 60) + 'M AGO';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'H AGO';
+  return Math.floor(sec / 86400) + 'D AGO';
+}
+
+function durationSince(ts) {
+  if (!ts) return null;
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (sec < 60) return sec + 'S';
+  if (sec < 3600) return Math.floor(sec / 60) + 'M ' + (sec % 60) + 'S';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'H ' + Math.floor((sec % 3600) / 60) + 'M';
+  return Math.floor(sec / 86400) + 'D ' + Math.floor((sec % 86400) / 3600) + 'H';
+}
+
+function classFor(val, warn, bad) {
+  if (val == null || isNaN(val)) return '';
+  if (val >= bad) return 'bad';
+  if (val >= warn) return 'warn';
+  return 'good';
+}
+
+function setPercentBar(elValue, elBar, pct, warn, bad, suffix) {
+  if (pct == null) {
+    elValue.textContent = '--';
+    elValue.className = 'stat-val';
+    renderBarChart(elBar, 0, { mode: 'threshold', maxHeight: 14 });
+    return;
+  }
+  const cls = classFor(pct, warn, bad);
+  elValue.textContent = pct + (suffix || '%');
+  elValue.className = 'stat-val ' + cls;
+  renderBarChart(elBar, pct, { mode: 'threshold', maxHeight: 14, levelCls: cls });
+}
+
+function classForWifi(dbm) {
+  if (dbm == null) return '';
+  if (dbm >= -65) return 'good';
+  if (dbm >= -75) return 'warn';
+  return 'bad';
+}
+
+
+function pushLatencySample(ms) {
+  const sample = (ms != null && !isNaN(ms)) ? ms : 0;
+  latencySamples.push(sample);
+  while (latencySamples.length > MAX_SAMPLES) latencySamples.shift();
+  renderBarChart($('latency-spark'), latencySamples.slice(), { animateFill: !document.body.classList.contains('fx-paused') });
+}
+
+function renderServices(services) {
+  const el = $('svc-pills');
+  if (!services) { el.innerHTML = ''; return; }
+  el.innerHTML = Object.entries(services).map(([name, state]) => {
+    const active = state === 'active';
+    const upper = name.toUpperCase();
+    const dotsLen = Math.max(4, 22 - upper.length);
+    const status = active ? '[ACTIVE]' : '[' + String(state).toUpperCase() + ']';
+    return '<div class="svc-line"><span class="svc-name">' + upper + '</span>' +
+           '<span class="svc-dots">' + '.'.repeat(dotsLen) + '</span>' +
+           '<span class="svc-status' + (active ? ' active' : '') + '">' + status + '</span></div>';
+  }).join('');
+}
+
+function updateFooter(meta) {
+  if (!meta) return;
+  const parts = ['V' + (meta.version || '?')];
+  if (meta.python) parts.push('PY ' + meta.python);
+  if (meta.deployed_at) parts.push('DEP ' + meta.deployed_at);
+  parts.push('AUTH OFF');
+  $('app-footer').textContent = parts.join(' | ');
+}
+
+function updateFooterTrivia() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const cx = (typeof window.mouseX === 'number') ? window.mouseX : Math.round(window.innerWidth / 2);
+  const cy = (typeof window.mouseY === 'number') ? window.mouseY : Math.round(window.innerHeight / 2);
+  $('footer-trivia').textContent =
+    'RES ' + w + 'X' + h + ' | CUR ' + cx + ',' + cy +
+    (healthUptimeSec != null ? ' | PI UP ' + healthUptimeSec + 'S' : '');
+}
+
+function updateFreshnessDisplay() {
+  const el = $('last-update');
+  if (!lastStatusOkAt) {
+    if (!lastStatusAttemptAt) el.textContent = 'CONNECTING...';
+    return;
+  }
+  const sec = Math.max(0, Math.floor((Date.now() - lastStatusOkAt) / 1000));
+  el.textContent = 'UPDATED ' + sec + 'S AGO';
+  const pollMs = getPollMs();
+  const stale = !lastStatusOk || (Date.now() - lastStatusOkAt) > pollMs * 2;
+  $('hud-header').classList.toggle('stale-data', stale);
+  $('hud-root').classList.toggle('metrics-dim', stale);
+}
+
+function formatTailscaleHtml(ts) {
+  if (!ts) {
+    return '<span class="bad">OFFLINE</span>';
+  }
+  if (ts.running) {
+    const ip = ts.self_ip ? '<span class="good">' + escapeHtml(ts.self_ip) + '</span>' : '<span class="good">ACTIVE</span>';
+    const peers = (ts.peers_online != null && ts.peers_total != null)
+      ? '<span class="mono" style="color:var(--text-muted)"> | ' + ts.peers_online + '/' + ts.peers_total + ' PEERS</span>'
+      : '';
+    return ip + peers;
+  }
+  if (ts.backend_state && ts.backend_state !== 'daemon-active') {
+    return '<span class="warn">' + escapeHtml(String(ts.backend_state).toUpperCase()) + '</span>';
+  }
+  return '<span class="bad">OFFLINE</span>';
+}
+
+function formatClockTime(now) {
+  const parts = now.toLocaleTimeString(LOCALE, {
+    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).split(':');
+  if (parts.length < 3) return now.toLocaleTimeString(LOCALE, { hour12: false });
+  return parts[0] + '<span class="clock-colon">:</span>' + parts[1] +
+         '<span class="clock-colon">:</span>' + parts[2];
+}
+
+function loadWorldClockLabels() {
+  try {
+    const raw = localStorage.getItem(WORLD_CLOCK_LABELS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveWorldClockLabels(labels) {
+  const clean = {};
+  Object.keys(labels || {}).forEach((id) => {
+    const v = String(labels[id] || '').trim();
+    if (v) clean[id] = v.toUpperCase();
+  });
+  if (Object.keys(clean).length) {
+    localStorage.setItem(WORLD_CLOCK_LABELS_KEY, JSON.stringify(clean));
+  } else {
+    localStorage.removeItem(WORLD_CLOCK_LABELS_KEY);
+  }
+  worldClockLabels = clean;
+}
+
+function loadWorldClockIds() {
+  try {
+    const raw = localStorage.getItem(WORLD_CLOCKS_KEY);
+    if (!raw) return DEFAULT_WORLD_CLOCK_IDS.slice();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_WORLD_CLOCK_IDS.slice();
+    const ids = parsed.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item.id === 'string') return item.id;
+      return null;
+    }).filter((id) => id && TIMEZONE_BY_ID[id]);
+    return ids.length ? ids : DEFAULT_WORLD_CLOCK_IDS.slice();
+  } catch (e) {
+    return DEFAULT_WORLD_CLOCK_IDS.slice();
+  }
+}
+
+function saveWorldClockIds(ids) {
+  localStorage.setItem(WORLD_CLOCKS_KEY, JSON.stringify(ids));
+  worldClockIds = ids.slice();
+}
+
+function getWorldClockDisplayLabel(id, index) {
+  const custom = worldClockLabels[id];
+  if (custom) return custom;
+  const entry = TIMEZONE_BY_ID[id];
+  if (entry && entry.label) return entry.label;
+  return 'TIME-' + (index + 1);
+}
+
+function getDisplayWorldClocks() {
+  return worldClockIds.slice(0, MAX_WORLD_CLOCKS_DISPLAY).map((id, index) => {
+    const entry = TIMEZONE_BY_ID[id];
+    if (!entry) return null;
+    return {
+      id: entry.id,
+      tag: entry.tag,
+      tz: entry.tz,
+      label: getWorldClockDisplayLabel(id, index)
+    };
+  }).filter(Boolean);
+}
+
+function formatWorldClockTime(now, tz) {
+  try {
+    return now.toLocaleTimeString(LOCALE, {
+      hour12: false,
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (e) {
+    return '--:--:--';
+  }
+}
+
+function updateWorldClockScrollClass() {
+  const scroll = $('world-clocks-scroll');
+  const count = getDisplayWorldClocks().length;
+  scroll.classList.toggle('scrollable', count > WORLD_CLOCK_SCROLL_THRESHOLD);
+}
+
+function buildWorldClockDom() {
+  const container = $('world-clocks');
+  const clocks = getDisplayWorldClocks();
+  container.innerHTML = clocks.map((c) =>
+    '<div class="chip chip-row panel-chip world-clock-row" data-tz-id="' + c.id + '">' +
+      '<span class="world-clock-label">' + escapeHtml(c.label) +
+      ' <span class="chip-tag">[' + escapeHtml(c.tag) + ']</span></span>' +
+      '<span class="world-clock-time">--:--:--</span>' +
+    '</div>'
+  ).join('');
+  updateWorldClockScrollClass();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function tickWorldClockTimes(now) {
+  const rows = $('world-clocks').querySelectorAll('.world-clock-row');
+  rows.forEach((row) => {
+    const id = row.getAttribute('data-tz-id');
+    const entry = TIMEZONE_BY_ID[id];
+    const timeEl = row.querySelector('.world-clock-time');
+    if (!entry || !timeEl) return;
+    timeEl.textContent = formatWorldClockTime(now, entry.tz);
+  });
+}
+
+function initWorldClocks() {
+  worldClockIds = loadWorldClockIds();
+  worldClockLabels = loadWorldClockLabels();
+  buildWorldClockDom();
+}
+
+function openClockConfigModal() {
+  clockConfigDraftIds = worldClockIds.slice();
+  clockConfigDraftLabels = Object.assign({}, worldClockLabels);
+  $('clock-config-search').value = '';
+  renderClockConfigModal();
+  $('clock-config-modal').classList.add('show');
+  $('clock-config-search').focus();
+}
+
+function closeClockConfigModal() {
+  $('clock-config-modal').classList.remove('show');
+}
+
+function renderClockConfigModal() {
+  const q = ($('clock-config-search').value || '').trim().toUpperCase();
+  const selectedSet = new Set(clockConfigDraftIds);
+  const catalogEl = $('clock-catalog-list');
+  const selectedEl = $('clock-selected-list');
+  const warn = $('clock-config-warn');
+
+  warn.classList.toggle('show', clockConfigDraftIds.length > MAX_WORLD_CLOCKS_DISPLAY);
+  $('clock-selected-count').textContent = String(clockConfigDraftIds.length);
+
+  const filtered = TIMEZONE_CATALOG.filter((e) => {
+    if (!q) return true;
+    const hay = (e.label + ' ' + e.tag + ' ' + e.id).toUpperCase();
+    return hay.indexOf(q) !== -1;
+  });
+
+  if (!filtered.length) {
+    catalogEl.innerHTML = '<div class="clock-config-empty">NO MATCHES</div>';
+  } else {
+    catalogEl.innerHTML = filtered.map((e) => {
+      const inList = selectedSet.has(e.id);
+      return '<div class="clock-config-item">' +
+        '<span class="clock-config-item-meta">' + escapeHtml(e.label) +
+        ' <span class="clock-config-item-tag">[' + escapeHtml(e.tag) + ']</span></span>' +
+        '<button type="button" class="clock-config-mini" data-catalog-add="' + escapeHtml(e.id) + '"' +
+        (inList ? ' disabled' : '') + '>[ ADD ]</button></div>';
+    }).join('');
+  }
+
+  if (!clockConfigDraftIds.length) {
+    selectedEl.innerHTML = '<div class="clock-config-empty">NO CLOCKS — ADD FROM CATALOG</div>';
+  } else {
+    selectedEl.innerHTML = clockConfigDraftIds.map((id, idx) => {
+      const entry = TIMEZONE_BY_ID[id];
+      if (!entry) return '';
+      const labelVal = clockConfigDraftLabels[id] || entry.label;
+      const upDisabled = idx === 0 ? ' disabled' : '';
+      const downDisabled = idx === clockConfigDraftIds.length - 1 ? ' disabled' : '';
+      return '<div class="clock-config-item" data-selected-id="' + escapeHtml(id) + '">' +
+        '<div class="clock-config-item-meta">' +
+          '<span>' + escapeHtml(entry.label) + ' <span class="clock-config-item-tag">[' +
+          escapeHtml(entry.tag) + ']</span></span>' +
+          '<input type="text" class="clock-config-label-inp" data-label-id="' + escapeHtml(id) + '" ' +
+          'value="' + escapeHtml(labelVal) + '" maxlength="24" aria-label="Display label">' +
+        '</div>' +
+        '<div class="clock-config-selected-actions">' +
+          '<button type="button" class="clock-config-mini" data-move="up" data-id="' + escapeHtml(id) + '"' + upDisabled + '>[ ▲ ]</button>' +
+          '<button type="button" class="clock-config-mini" data-move="down" data-id="' + escapeHtml(id) + '"' + downDisabled + '>[ ▼ ]</button>' +
+          '<button type="button" class="clock-config-mini" data-remove-id="' + escapeHtml(id) + '">[ REM ]</button>' +
+        '</div></div>';
+    }).join('');
+  }
+}
+
+function moveClockConfigId(id, dir) {
+  const i = clockConfigDraftIds.indexOf(id);
+  if (i < 0) return;
+  const j = dir === 'up' ? i - 1 : i + 1;
+  if (j < 0 || j >= clockConfigDraftIds.length) return;
+  const next = clockConfigDraftIds.slice();
+  const tmp = next[i];
+  next[i] = next[j];
+  next[j] = tmp;
+  clockConfigDraftIds = next;
+  renderClockConfigModal();
+}
+
+function addClockConfigId(id) {
+  if (!TIMEZONE_BY_ID[id] || clockConfigDraftIds.indexOf(id) !== -1) return;
+  clockConfigDraftIds.push(id);
+  renderClockConfigModal();
+}
+
+function removeClockConfigId(id) {
+  clockConfigDraftIds = clockConfigDraftIds.filter((x) => x !== id);
+  delete clockConfigDraftLabels[id];
+  renderClockConfigModal();
+}
+
+function syncDraftLabelsFromInputs() {
+  $('clock-selected-list').querySelectorAll('.clock-config-label-inp').forEach((inp) => {
+    const id = inp.getAttribute('data-label-id');
+    const entry = TIMEZONE_BY_ID[id];
+    const val = inp.value.trim().toUpperCase();
+    if (!id || !entry) return;
+    if (!val || val === entry.label) delete clockConfigDraftLabels[id];
+    else clockConfigDraftLabels[id] = val;
+  });
+}
+
+function saveClockConfig() {
+  syncDraftLabelsFromInputs();
+  if (!clockConfigDraftIds.length) {
+    toast('ADD AT LEAST ONE CLOCK');
+    return;
+  }
+  saveWorldClockIds(clockConfigDraftIds);
+  saveWorldClockLabels(clockConfigDraftLabels);
+  buildWorldClockDom();
+  tickWorldClockTimes(new Date());
+  closeClockConfigModal();
+  toast('CLOCKS SAVED');
+}
+
+function resetClockConfigDefaults() {
+  clockConfigDraftIds = DEFAULT_WORLD_CLOCK_IDS.slice();
+  clockConfigDraftLabels = {};
+  $('clock-config-search').value = '';
+  renderClockConfigModal();
+}
+
+(function setupWorldClockConfig() {
+  $('world-clocks-config-btn').addEventListener('click', openClockConfigModal);
+  $('clock-config-cancel').addEventListener('click', closeClockConfigModal);
+  $('clock-config-save').addEventListener('click', saveClockConfig);
+  $('clock-config-reset').addEventListener('click', resetClockConfigDefaults);
+  $('clock-config-search').addEventListener('input', renderClockConfigModal);
+  $('clock-catalog-list').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-catalog-add]');
+    if (!btn) return;
+    addClockConfigId(btn.getAttribute('data-catalog-add'));
+  });
+  $('clock-selected-list').addEventListener('click', (ev) => {
+    const rem = ev.target.closest('[data-remove-id]');
+    if (rem) {
+      removeClockConfigId(rem.getAttribute('data-remove-id'));
+      return;
+    }
+    const moveBtn = ev.target.closest('[data-move]');
+    if (moveBtn) {
+      moveClockConfigId(moveBtn.getAttribute('data-id'), moveBtn.getAttribute('data-move'));
+    }
+  });
+  $('clock-config-modal').addEventListener('click', (ev) => {
+    if (ev.target === $('clock-config-modal')) closeClockConfigModal();
+  });
+})();
+
+function tickClocks() {
+  const now = new Date();
+  $('clock-time').innerHTML = formatClockTime(now);
+  $('clock-date').textContent = now.toLocaleDateString(LOCALE, {
+    year: 'numeric', month: 'short', day: '2-digit'
+  }).toUpperCase();
+  const day = now.toLocaleDateString(LOCALE, { weekday: 'short' }).toUpperCase();
+  $('clock-day').textContent = '[' + day + ']';
+
+  tickWorldClockTimes(now);
+
+  updateCountdown(now);
+  updateFooterTrivia();
+  updateFreshnessDisplay();
+}
+
+function updateCountdown(now) {
+  const title = $('countdown-title');
+  const val = $('countdown-value');
+  const sub = $('countdown-sub');
+  const y = now.getFullYear();
+
+  if (COUNTDOWN_MODE === 'uptime') {
+    title.textContent = '[ PI UPTIME ]';
+    const u = $('pi-uptime').textContent.replace(/^UPTIME\s*/i, '');
+    val.textContent = u && u !== '--' ? u.toUpperCase() : '--';
+    sub.textContent = 'FROM LAST STATUS POLL';
+    return;
+  }
+
+  if (COUNTDOWN_MODE === 'count_up_year') {
+    const start = new Date(y, 0, 1);
+    const days = Math.floor((now - start) / 86400000) + 1;
+    title.textContent = '[' + y + '] COUNT UP';
+    val.textContent = String(days).padStart(3, '0') + ' DAYS';
+    sub.textContent = 'DAYS ELAPSED IN ' + y;
+    return;
+  }
+
+  const next = new Date(y + 1, 0, 1);
+  const ms = next - now;
+  const days = Math.floor(ms / 86400000);
+  const hrs = Math.floor((ms % 86400000) / 3600000);
+  title.textContent = '[ NEXT YEAR ] COUNTDOWN';
+  val.textContent = days + 'D ' + String(hrs).padStart(2, '0') + 'H';
+  sub.textContent = 'UNTIL ' + (y + 1) + '-01-01 00:00 LOCAL';
+}
+
+function updateProcessBars() {
+  const linkPct = linkQualityPct(lastPcOnline, lastPcLatencyMs);
+  renderBarChart($('pc-link-bar'), linkPct, {
+    mode: 'threshold',
+    animateFill: !document.body.classList.contains('fx-paused')
+  });
+  renderBarChart($('pi-mem-bar-chars'), lastPiMemoryPct, {
+    mode: 'threshold',
+    levelCls: lastPiMemoryPct != null ? classFor(lastPiMemoryPct, 75, 90) : '',
+    animateFill: !document.body.classList.contains('fx-paused')
+  });
+  $('pi-mem-inline').textContent = lastPiMemoryPct != null ? lastPiMemoryPct + '%' : '--';
+}
+
+async function copyTextFromEl(elId) {
+  const text = $(elId).textContent.trim();
+  if (!text || text === '--') { toast('NOTHING TO COPY'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('COPIED');
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      toast('COPIED');
+    } catch (e2) {
+      toast('COPY FAILED');
+    }
+    document.body.removeChild(ta);
+  }
+}
+
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => copyTextFromEl(btn.getAttribute('data-copy')));
+});
+
+function getPollMs() {
+  const sel = $('poll-interval');
+  const ms = parseInt(sel.value, 10) || DEFAULT_POLL_MS;
+  localStorage.setItem(POLL_KEY, String(ms));
+  return ms;
+}
+
+function clearStatusPoll() {
+  if (statusPollTimer) clearInterval(statusPollTimer);
+  statusPollTimer = null;
+}
+
+function clearHealthPoll() {
+  if (healthPollTimer) clearInterval(healthPollTimer);
+  healthPollTimer = null;
+}
+
+function scheduleStatusPoll() {
+  clearStatusPoll();
+  if (document.visibilityState === 'hidden') return;
+  const ms = getPollMs();
+  statusPollTimer = setInterval(() => refreshStatus(false), ms);
+}
+
+function scheduleHealthPoll() {
+  clearHealthPoll();
+  if (document.visibilityState === 'hidden') return;
+  healthPollTimer = setInterval(refreshHealth, HEALTH_POLL_MS);
+}
+
+function setFxPaused(paused) {
+  document.body.classList.toggle('fx-paused', paused);
+}
+
+$('poll-interval').addEventListener('change', () => {
+  scheduleStatusPoll();
+  refreshStatus(true);
+  updateFreshnessDisplay();
+});
+
+(function initPoll() {
+  const saved = localStorage.getItem(POLL_KEY);
+  if (saved) {
+    const opt = $('poll-interval').querySelector('option[value="' + saved + '"]');
+    if (opt) opt.selected = true;
+    else if (saved === '12000') {
+      const five = $('poll-interval').querySelector('option[value="5000"]');
+      if (five) five.selected = true;
+    }
+  }
+})();
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    setFxPaused(false);
+    refreshStatus(true);
+    refreshHealth();
+    scheduleStatusPoll();
+    scheduleHealthPoll();
+  } else {
+    setFxPaused(true);
+    clearStatusPoll();
+    clearHealthPoll();
+  }
+});
+
+async function refreshHealth() {
+  if (document.visibilityState === 'hidden') return;
+  try {
+    const r = await fetch('/api/health');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.uptime != null) healthUptimeSec = d.uptime;
+    if (COUNTDOWN_MODE === 'uptime' && d.uptime != null) {
+      const d0 = Math.floor(d.uptime / 86400);
+      const h = Math.floor((d.uptime % 86400) / 3600);
+      const m = Math.floor((d.uptime % 3600) / 60);
+      $('pi-uptime').textContent = 'UPTIME ' + d0 + 'D ' + h + 'H ' + m + 'M';
+    }
+    updateFooterTrivia();
+  } catch (e) { /* lightweight — ignore */ }
+}
+
+async function refreshStatus(force) {
+  if (statusFetchInFlight && !force) return;
+  statusFetchInFlight = true;
+  lastStatusAttemptAt = Date.now();
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) throw new Error('Status ' + r.status);
+    const d = await r.json();
+    lastStatusOk = true;
+    lastStatusOkAt = Date.now();
+
+    if (!devicesCache.length) {
+      lastPcOnline = !!d.pc_online;
+      lastPcLatencyMs = d.pc_latency_ms != null ? d.pc_latency_ms : null;
+      pushLatencySample(d.pc_latency_ms);
+      updateProcessBars();
+      const bracket = $('pc-bracket');
+      const msEl = $('pc-latency');
+      const pres = $('pc-presence');
+      if (d.pc_online) {
+        bracket.className = 'status-bracket online';
+        bracket.textContent = '[ ONLINE ]';
+        msEl.textContent = (d.pc_latency_ms != null) ? '| ' + d.pc_latency_ms + ' MS' : '';
+        if (d.presence && d.presence.online_since_ts) {
+          pres.textContent = 'ONLINE FOR: ' + durationSince(d.presence.online_since_ts);
+        } else pres.textContent = '';
+      } else {
+        bracket.className = 'status-bracket offline';
+        bracket.textContent = '[ OFFLINE ]';
+        msEl.textContent = '';
+        if (d.presence && d.presence.last_seen_ts) {
+          pres.textContent = 'LAST SEEN: ' + ago(d.presence.last_seen_ts);
+        } else pres.textContent = '';
+      }
+      $('pc-ip').textContent = d.pc_ip || '--';
+      $('pc-mac').textContent = d.pc_mac || '--';
+      $('device-card-title').textContent = 'MAIN PC';
+    }
+
+    const pi = d.pi || {};
+    if (pi.temp != null) {
+      const tempCls = classFor(pi.temp, 65, 75);
+      $('pi-temp').textContent = pi.temp + 'C';
+      $('pi-temp').className = 'stat-val ' + tempCls;
+      renderBarChart($('pi-temp-bar'), Math.min(100, (pi.temp / 90) * 100), {
+        mode: 'threshold', maxHeight: 14, levelCls: tempCls
+      });
+    }
+    if (pi.load != null) {
+      const loadCls = classFor(pi.load, 1.0, 2.0);
+      $('pi-load').textContent = pi.load.toFixed(2);
+      $('pi-load').className = 'stat-val ' + loadCls;
+      renderBarChart($('pi-load-bar'), Math.min(100, (pi.load / 4) * 100), {
+        mode: 'threshold', maxHeight: 14, levelCls: loadCls
+      });
+    }
+    setPercentBar($('pi-mem'), $('pi-mem-bar'), pi.memory, 75, 90);
+    lastPiMemoryPct = pi.memory != null ? pi.memory : null;
+    updateProcessBars();
+    setPercentBar($('pi-disk'), $('pi-disk-bar'), pi.disk, 80, 92);
+
+    $('pi-uptime').textContent = 'UPTIME ' + (pi.uptime || '--').toUpperCase();
+    renderServices(d.services);
+
+    if (pi.wifi) {
+      const wifiCls = classForWifi(pi.wifi.signal_dbm);
+      const ssid = pi.wifi.ssid ? ' | ' + pi.wifi.ssid.toUpperCase() : '';
+      $('pi-wifi').innerHTML = '<span class="' + wifiCls + '">' + pi.wifi.signal_dbm + ' DBM</span>' +
+                               '<span class="mono" style="color:var(--text-muted)">' + ssid + '</span>';
+    } else $('pi-wifi').textContent = '--';
+
+    if (pi.net && (pi.net.rx_bps != null || pi.net.tx_bps != null)) {
+      $('pi-net').innerHTML = 'RX ' + fmtBps(pi.net.rx_bps) + ' | TX ' + fmtBps(pi.net.tx_bps);
+    } else $('pi-net').textContent = '--';
+
+    if (pi.swap != null) {
+      $('pi-swap-row').style.display = '';
+      $('pi-swap').textContent = pi.swap + '%';
+      $('pi-swap').className = 'value ' + classFor(pi.swap, 25, 50);
+    } else $('pi-swap-row').style.display = 'none';
+
+    $('pi-ts').innerHTML = formatTailscaleHtml(d.tailscale);
+
+    if (d.tailscale && d.tailscale.self_ip) {
+      $('ts-meta').textContent = 'PI ' + d.tailscale.self_ip;
+    } else {
+      $('ts-meta').textContent = '';
+    }
+    updateFooter(d.meta);
+    if (COUNTDOWN_MODE === 'uptime') updateCountdown(new Date());
+    updateFreshnessDisplay();
+    refreshSchedules(false);
+    await loadDevices();
+  } catch (e) {
+    lastStatusOk = false;
+    $('last-update').textContent = 'CONNECTION ERROR';
+    updateFreshnessDisplay();
+  } finally {
+    statusFetchInFlight = false;
+  }
+}
+
+function refresh() { return refreshStatus(true); }
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+const _actionLabels = {};
+
+async function action(name, btn, needsConfirm) {
+  if (needsConfirm) {
+    const label = name === 'shutdown' ? 'SHUT DOWN' : 'RESTART';
+    if (!confirm('REALLY ' + label + ' THE MAIN PC? THIS CANNOT BE UNDONE FROM HERE.')) return;
+  }
+  const origText = btn.textContent;
+  _actionLabels[btn] = origText;
+  btn.disabled = true;
+  btn.classList.add('btn-busy');
+  btn.textContent = '[ ... ]';
+  try {
+    const r = await fetch('/api/' + name, { method: 'POST' });
+    const d = await r.json();
+    toast(d.ok ? '>>> ' + name.toUpperCase() + ' SENT' : '>>> ' + name.toUpperCase() + ' FAILED');
+    if (d.ok) refreshStatus(true);
+  } catch (e) {
+    toast('>>> REQUEST FAILED');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('btn-busy');
+    btn.textContent = _actionLabels[btn] || origText;
+  }
+}
+
+(function setupTerminalsLazy() {
+  const host = window.location.hostname;
+  const piUrl = 'http://' + host + ':7681/';
+  const pcUrl = 'http://' + host + ':7682/';
+  $('term-pi-link').href = piUrl;
+  $('term-pc-link').href = pcUrl;
+
+  function loadTerm(iframeId, phId, url) {
+    const iframe = $(iframeId);
+    if (iframe.dataset.loaded) return;
+    iframe.src = url;
+    iframe.classList.add('loaded');
+    iframe.dataset.loaded = '1';
+    $(phId).classList.add('hidden');
+  }
+  $('term-pi-load').onclick = () => loadTerm('term-pi', 'term-pi-ph', piUrl);
+  $('term-pc-load').onclick = () => loadTerm('term-pc', 'term-pc-ph', pcUrl);
+})();
+
+function initBarCharts() {
+  ['latency-spark', 'pc-link-bar', 'pi-mem-bar-chars', 'pi-temp-bar', 'pi-load-bar', 'pi-mem-bar', 'pi-disk-bar']
+    .forEach((id) => ensureBarSegments($(id)));
+  renderBarChart($('latency-spark'), []);
+  updateProcessBars();
+}
+
+initBarCharts();
+function markHudLoaded() {
+  requestAnimationFrame(() => document.body.classList.add('loaded'));
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', markHudLoaded);
+} else {
+  markHudLoaded();
+}
+
+function scrambleTitleOnce() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const el = $('title-scramble');
+  const target = el.getAttribute('data-text') || el.textContent;
+  const start = performance.now();
+  const duration = 1000;
+  function frame(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const reveal = Math.floor(t * target.length);
+    let out = '';
+    for (let i = 0; i < target.length; i++) {
+      if (i < reveal) out += target[i];
+      else if (target[i] === ' ') out += ' ';
+      else out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+    }
+    el.textContent = out;
+    if (t < 1) requestAnimationFrame(frame);
+    else el.textContent = target;
+  }
+  requestAnimationFrame(frame);
+}
+
+function scheduleSectionGlitches() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const headers = document.querySelectorAll('.block-title, .card-title span:first-child');
+  function burst() {
+    if (document.visibilityState === 'hidden' || document.body.classList.contains('fx-paused')) {
+      scheduleNext();
+      return;
+    }
+    const list = Array.from(headers);
+    if (!list.length) { scheduleNext(); return; }
+    const el = list[Math.floor(Math.random() * list.length)];
+    el.classList.add('glitch-active');
+    el.addEventListener('animationend', () => el.classList.remove('glitch-active'), { once: true });
+    scheduleNext();
+  }
+  function scheduleNext() {
+    const delay = 8000 + Math.floor(Math.random() * 4000);
+    setTimeout(burst, delay);
+  }
+  scheduleNext();
+}
+
+function scheduleVhsWobble() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  setInterval(() => {
+    if (document.visibilityState === 'hidden' || document.body.classList.contains('fx-paused')) return;
+    const hud = $('hud-root');
+    hud.classList.add('vhs-wobble-active');
+    hud.addEventListener('animationend', () => hud.classList.remove('vhs-wobble-active'), { once: true });
+  }, 10000);
+}
+
+function initFooterHexStream() {
+  const chunks = [];
+  for (let i = 0; i < 48; i++) {
+    chunks.push(Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0').toUpperCase());
+  }
+  const line = chunks.join(' ') + '  SYS_OK  LINK_IDLE  BUF_0x' +
+    Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase() + '  ';
+  $('footer-hex-stream').textContent = line + line;
+}
+
+initWorldClocks();
+initFooterHexStream();
+tickClocks();
+setInterval(tickClocks, FAST_TICK_MS);
+window.addEventListener('resize', updateFooterTrivia);
+document.addEventListener('mousemove', (e) => {
+  window.mouseX = e.clientX;
+  window.mouseY = e.clientY;
+}, { passive: true });
+
+scrambleTitleOnce();
+scheduleSectionGlitches();
+scheduleVhsWobble();
+
+/* --- Schedule / calendar --- */
+let schedulesCache = [];
+let holidaysCacheByYear = {};
+let schedViewYear = new Date().getFullYear();
+let schedViewMonth = new Date().getMonth();
+let schedSelectedDate = null;
+let schedEditingId = null;
+let schedFetchInFlight = false;
+let schedPollTimer = null;
+let schedSavedFlashTimer = null;
+let schedCalFilter = 'all';
+
+const SCHED_ACTION_LABELS = { notify: 'NTFY', wake: 'WOL', both: 'NTFY+WOL' };
+const SCHED_REPEAT_LABELS = {
+  none: 'ONCE', daily: 'DLY', weekly: 'WKL', monthly: 'MO', yearly: 'YR',
+  weekdays: 'WD', weekends: 'WE', every_2_weeks: '2WK', every_3_months: '3MO'
+};
+const SCHED_CATEGORY_TAGS = {
+  general: '', girlfriend: 'GF', family: 'FAM', work: 'WRK',
+  health: 'HLT', other: 'OTH'
+};
+const SCHED_NOTIFY_PRESETS = [
+  { min: 0, label: 'AT EVENT' },
+  { min: 15, label: '15 MIN' },
+  { min: 60, label: '1 HOUR' },
+  { min: 120, label: '2 HOURS' },
+  { min: 1440, label: '1 DAY' },
+  { min: 4320, label: '3 DAYS' },
+  { min: 10080, label: '1 WEEK' },
+  { min: 20160, label: '2 WEEKS' },
+  { min: 43200, label: '1 MONTH' }
+];
+const SCHED_CAT_DOT_CLASS = {
+  general: 'cat-general', girlfriend: 'cat-girlfriend', family: 'cat-family',
+  work: 'cat-work', health: 'cat-health', other: 'cat-other'
+};
+
+function todayDateKey() {
+  return scheduleDateKey(new Date());
+}
+
+function initSchedNotifyChips() {
+  const wrap = $('sched-notify-chips');
+  if (!wrap || wrap.childElementCount) return;
+  wrap.innerHTML = SCHED_NOTIFY_PRESETS.map((p) =>
+    '<button type="button" class="sched-notify-chip' + (p.min === 0 ? ' active' : '') +
+    '" data-min="' + p.min + '" aria-pressed="' + (p.min === 0 ? 'true' : 'false') + '">' +
+    '[ ' + escapeHtml(p.label) + ' ]</button>'
+  ).join('');
+  wrap.querySelectorAll('.sched-notify-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      btn.setAttribute('aria-pressed', btn.classList.contains('active') ? 'true' : 'false');
+      const active = wrap.querySelectorAll('.sched-notify-chip.active');
+      if (!active.length) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      }
+    });
+  });
+}
+
+function getSchedNotifyOffsetsFromUi() {
+  const mins = [];
+  $('sched-notify-chips').querySelectorAll('.sched-notify-chip.active').forEach((btn) => {
+    const m = parseInt(btn.getAttribute('data-min'), 10);
+    if (!isNaN(m) && m >= 0) mins.push(m);
+  });
+  if (!mins.length) mins.push(0);
+  return [...new Set(mins)].sort((a, b) => b - a).slice(0, 8);
+}
+
+function setSchedNotifyOffsetsInUi(offsets) {
+  const set = new Set(Array.isArray(offsets) ? offsets.map(Number) : [0]);
+  if (!set.size) set.add(0);
+  $('sched-notify-chips').querySelectorAll('.sched-notify-chip').forEach((btn) => {
+    const m = parseInt(btn.getAttribute('data-min'), 10);
+    const on = set.has(m);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function initScheduleFormDefaults() {
+  initSchedNotifyChips();
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 15));
+  schedSelectedDate = todayDateKey();
+  $('sched-date').value = schedSelectedDate;
+  $('sched-time').value = String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0');
+  schedViewYear = now.getFullYear();
+  schedViewMonth = now.getMonth();
+  setSchedNotifyOffsetsInUi([0]);
+}
+
+function setSchedSelectedDate(key, opts) {
+  opts = opts || {};
+  if (!key) return;
+  schedSelectedDate = key;
+  $('sched-date').value = key;
+  const parts = key.split('-').map(Number);
+  if (parts.length === 3) {
+    schedViewYear = parts[0];
+    schedViewMonth = parts[1] - 1;
+  }
+  renderScheduleCalendar();
+  renderSchedCalDayDetail();
+  if (opts.focusForm) {
+    $('sched-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    $('sched-title').focus();
+  }
+}
+
+function flashSchedSaved() {
+  const el = $('sched-saved-flash');
+  el.textContent = '[ SAVED ]';
+  el.classList.add('show');
+  if (schedSavedFlashTimer) clearTimeout(schedSavedFlashTimer);
+  schedSavedFlashTimer = setTimeout(() => {
+    el.classList.remove('show');
+    el.textContent = '';
+  }, 1600);
+}
+
+function clearSchedEditMode() {
+  schedEditingId = null;
+  $('sched-submit-btn').textContent = '[ ADD ]';
+  $('sched-cancel-edit').hidden = true;
+}
+
+function truncSchedText(s, maxLen) {
+  s = (s || '').trim();
+  if (!s) return '';
+  return s.length <= maxLen ? s : s.slice(0, maxLen) + '…';
+}
+
+function schedulePayloadFromForm() {
+  return {
+    title: $('sched-title').value.trim(),
+    datetime: buildScheduleDatetime(),
+    description: $('sched-description').value.trim(),
+    repeat: $('sched-repeat').value,
+    action: $('sched-action').value,
+    category: $('sched-category').value || 'general',
+    notify_offsets_minutes: getSchedNotifyOffsetsFromUi(),
+    enabled: true
+  };
+}
+
+function loadScheduleIntoForm(item) {
+  if (!item) return;
+  $('sched-title').value = item.title || '';
+  $('sched-description').value = item.description || '';
+  const dt = parseScheduleLocal(item.datetime);
+  if (dt) {
+    setSchedSelectedDate(scheduleDateKey(dt));
+    $('sched-time').value = String(dt.getHours()).padStart(2, '0') + ':' +
+      String(dt.getMinutes()).padStart(2, '0');
+  }
+  $('sched-repeat').value = item.repeat || 'none';
+  $('sched-action').value = item.action || 'notify';
+  $('sched-category').value = item.category || 'general';
+  setSchedNotifyOffsetsInUi(item.notify_offsets_minutes || [0]);
+}
+
+function applySchedQuickTemplate(kind) {
+  if (kind === 'anniversary') {
+    const title = prompt('ANNIVERSARY TITLE:', 'Anniversary');
+    if (title === null) return;
+    $('sched-title').value = title.trim() || 'Anniversary';
+    $('sched-repeat').value = 'yearly';
+    $('sched-category').value = 'girlfriend';
+    $('sched-action').value = 'notify';
+    setSchedNotifyOffsetsInUi([10080, 1440, 0]);
+  } else if (kind === 'birthday') {
+    const title = prompt('BIRTHDAY TITLE:', 'Birthday');
+    if (title === null) return;
+    $('sched-title').value = title.trim() || 'Birthday';
+    $('sched-repeat').value = 'yearly';
+    $('sched-category').value = 'family';
+    $('sched-action').value = 'notify';
+    setSchedNotifyOffsetsInUi([10080, 0]);
+  } else if (kind === 'reminder') {
+    $('sched-title').value = '';
+    $('sched-repeat').value = 'none';
+    $('sched-category').value = 'general';
+    $('sched-action').value = 'notify';
+    setSchedNotifyOffsetsInUi([0]);
+  }
+  $('sched-title').focus();
+}
+
+function startEditSchedule(id) {
+  const item = schedulesCache.find((s) => s.id === id);
+  if (!item) return;
+  schedEditingId = id;
+  loadScheduleIntoForm(item);
+  $('sched-submit-btn').textContent = '[ SAVE ]';
+  $('sched-cancel-edit').hidden = false;
+  $('sched-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('sched-title').focus();
+}
+
+function parseScheduleLocal(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function scheduleDateKey(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function eventsByDateMap() {
+  const map = {};
+  schedulesCache.forEach((s) => {
+    if (s.enabled === false) return;
+    const dt = parseScheduleLocal(s.datetime);
+    if (!dt) return;
+    const key = scheduleDateKey(dt);
+    if (!map[key]) map[key] = [];
+    map[key].push(s);
+  });
+  return map;
+}
+
+function holidaysForViewYear() {
+  return holidaysCacheByYear[schedViewYear] || {};
+}
+
+async function ensureHolidaysYear(year) {
+  if (holidaysCacheByYear[year]) return;
+  try {
+    const r = await fetch('/api/holidays?year=' + encodeURIComponent(year));
+    if (!r.ok) return;
+    const d = await r.json();
+    const byDate = {};
+    (d.holidays || []).forEach((h) => {
+      if (!byDate[h.date]) byDate[h.date] = [];
+      byDate[h.date].push(h);
+    });
+    holidaysCacheByYear[year] = byDate;
+  } catch (e) { /* ignore */ }
+}
+
+function formatSchedCalDayDetail(key) {
+  if (!key) return '';
+  const holidays = (holidaysForViewYear()[key] || []);
+  const parts = key.split('-').map(Number);
+  if (parts.length !== 3) return '';
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (!holidays.length) {
+    return escapeHtml(dateLabel + ': —');
+  }
+  const lines = holidays.map((h) =>
+    '<span class="sched-cal-day-detail-holiday">' +
+    escapeHtml(dateLabel + ': ' + h.name_sv + ' / ' + h.name_en) + '</span>'
+  );
+  return lines.join('<br>');
+}
+
+function renderSchedCalDayDetail() {
+  const el = $('sched-cal-day-detail');
+  if (!el) return;
+  el.innerHTML = schedSelectedDate ? formatSchedCalDayDetail(schedSelectedDate) : '';
+}
+
+function renderScheduleDayCell(dayNum, key, otherMonth, eventsByDate, holidaysByDate) {
+  const todayKey = todayDateKey();
+  const events = eventsByDate[key] || [];
+  const holidays = holidaysByDate[key] || [];
+  const showEvents = schedCalFilter !== 'holidays';
+  const showHolidays = schedCalFilter !== 'mine';
+  let cls = 'sched-cal-day';
+  if (otherMonth) cls += ' other-month';
+  if (key === todayKey) cls += ' today';
+  if (key === schedSelectedDate) cls += ' selected';
+  if (showHolidays && holidays.length) cls += ' has-holiday';
+  if (showEvents && events.length) cls += ' has-event';
+
+  const dots = [];
+  const holidayTitle = showHolidays && holidays.length
+    ? holidays.map((h) => h.name_sv + ' / ' + h.name_en).join('; ')
+    : '';
+  if (showHolidays && holidays.length) {
+    dots.push('<span class="sched-cal-dot cat-holiday" title="' + escapeHtml(holidayTitle) + '"></span>');
+  }
+  if (showEvents) {
+    const cats = [];
+    events.forEach((ev) => {
+      const c = ev.category || 'general';
+      if (!cats.includes(c)) cats.push(c);
+    });
+    cats.slice(0, 4).forEach((c) => {
+      dots.push('<span class="sched-cal-dot ' + (SCHED_CAT_DOT_CLASS[c] || 'cat-general') + '"></span>');
+    });
+  }
+
+  const aria = key + (holidays[0] ? ' ' + holidays[0].name_sv : '');
+  const titleAttr = holidayTitle ? ' title="' + escapeHtml(holidayTitle) + '"' : '';
+  return '<div class="' + cls + '" data-date="' + escapeHtml(key) + '" role="button" tabindex="0" aria-label="' +
+    escapeHtml(aria) + '"' + titleAttr + '><span class="sched-cal-day-num">' + dayNum + '</span>' +
+    (dots.length ? '<span class="sched-cal-dots">' + dots.join('') + '</span>' : '') + '</div>';
+}
+
+function renderScheduleCalendar() {
+  const grid = $('sched-cal-grid');
+  const label = $('sched-month-label');
+  const y = schedViewYear;
+  const m = schedViewMonth;
+  const monthDate = new Date(y, m, 1);
+  label.textContent = monthDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' }).toUpperCase();
+  const startDow = monthDate.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const daysPrev = new Date(y, m, 0).getDate();
+  const prevMonth = m === 0 ? 11 : m - 1;
+  const prevYear = m === 0 ? y - 1 : y;
+  const eventsByDate = eventsByDateMap();
+  const holidaysByDate = holidaysForViewYear();
+  const weekdays = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  let html = weekdays.map((w) => '<div class="sched-cal-hd">' + w + '</div>').join('');
+  for (let i = 0; i < startDow; i++) {
+    const day = daysPrev - startDow + i + 1;
+    const key = prevYear + '-' + String(prevMonth + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    html += renderScheduleDayCell(day, key, true, eventsByDate, holidaysByDate);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    html += renderScheduleDayCell(day, key, false, eventsByDate, holidaysByDate);
+  }
+  const totalCells = startDow + daysInMonth;
+  const trailing = (7 - (totalCells % 7)) % 7;
+  const nextMonth = m === 11 ? 0 : m + 1;
+  const nextYear = m === 11 ? y + 1 : y;
+  for (let i = 1; i <= trailing; i++) {
+    const key = nextYear + '-' + String(nextMonth + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0');
+    html += renderScheduleDayCell(i, key, true, eventsByDate, holidaysByDate);
+  }
+  grid.innerHTML = html;
+  renderSchedCalDayDetail();
+}
+
+function nextNotifyForSchedule(s, eventDt) {
+  const offsets = Array.isArray(s.notify_offsets_minutes) ? s.notify_offsets_minutes : [0];
+  const now = new Date();
+  let best = null;
+  offsets.forEach((off) => {
+    const m = parseInt(off, 10);
+    if (isNaN(m) || m < 0) return;
+    const at = new Date(eventDt.getTime() - m * 60000);
+    if (at <= now) return;
+    if (!best || at < best) best = at;
+  });
+  return best;
+}
+
+function formatSchedWhen(iso) {
+  const d = parseScheduleLocal(iso);
+  if (!d) return '--';
+  return d.toLocaleString(LOCALE, {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }).toUpperCase();
+}
+
+function renderScheduleUpcoming() {
+  const el = $('sched-upcoming-list');
+  const sorted = schedulesCache
+    .filter((s) => s.enabled !== false)
+    .map((s) => ({ s, t: parseScheduleLocal(s.datetime) }))
+    .filter((x) => x.t)
+    .sort((a, b) => a.t - b.t)
+    .slice(0, 5);
+  if (!sorted.length) {
+    el.innerHTML = '<div class="sched-empty panel-chip">NO SCHEDULED EVENTS</div>';
+    return;
+  }
+  el.innerHTML = sorted.map(({ s, t }) => {
+    const act = SCHED_ACTION_LABELS[s.action] || String(s.action || '').toUpperCase();
+    const rep = SCHED_REPEAT_LABELS[s.repeat] || String(s.repeat || '').toUpperCase();
+    const cat = s.category || 'general';
+    const tag = SCHED_CATEGORY_TAGS[cat];
+    const tagHtml = tag
+      ? '<span class="sched-tag tag-' + (cat === 'girlfriend' ? 'gf' : cat === 'family' ? 'fam' : cat) + '">[' +
+        escapeHtml(tag) + ']</span> '
+      : '';
+    const nxt = nextNotifyForSchedule(s, t);
+    const nxtStr = nxt
+      ? 'NTFY ' + nxt.toLocaleString(LOCALE, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).toUpperCase()
+      : '';
+    const desc = truncSchedText(s.description, 40);
+    const descHtml = desc
+      ? '<span class="sched-item-desc">' + escapeHtml(desc) + '</span>'
+      : '';
+    return '<div class="sched-item sched-item-clickable" data-id="' + escapeHtml(s.id) + '" role="button" tabindex="0">' +
+      '<span class="sched-item-title">' + tagHtml + escapeHtml(s.title) + '</span>' +
+      '<span class="sched-item-actions">' +
+        '<button type="button" class="sched-mini sched-edit-btn" data-id="' + escapeHtml(s.id) + '">[ EDIT ]</button>' +
+        '<button type="button" class="sched-mini sched-del-btn" data-id="' + escapeHtml(s.id) + '">[ DEL ]</button>' +
+      '</span>' +
+      descHtml +
+      '<span class="sched-item-meta">' + escapeHtml(formatSchedWhen(s.datetime)) +
+        (nxtStr ? ' | ' + escapeHtml(nxtStr) : '') +
+        ' | ' + rep + ' | ' + act + '</span></div>';
+  }).join('');
+  el.querySelectorAll('.sched-edit-btn').forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      startEditSchedule(btn.getAttribute('data-id'));
+    };
+  });
+  el.querySelectorAll('.sched-del-btn').forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      deleteSchedule(btn.getAttribute('data-id'));
+    };
+  });
+  el.querySelectorAll('.sched-item-clickable').forEach((row) => {
+    row.onclick = (ev) => {
+      if (ev.target.closest('button')) return;
+      startEditSchedule(row.getAttribute('data-id'));
+    };
+    row.onkeydown = (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        startEditSchedule(row.getAttribute('data-id'));
+      }
+    };
+  });
+}
+
+function renderSchedulesUi() {
+  renderScheduleCalendar();
+  renderScheduleUpcoming();
+}
+
+async function refreshSchedules(force) {
+  if (schedFetchInFlight && !force) return;
+  schedFetchInFlight = true;
+  try {
+    await ensureHolidaysYear(schedViewYear);
+    const r = await fetch('/api/schedules');
+    if (!r.ok) throw new Error('schedules ' + r.status);
+    const d = await r.json();
+    schedulesCache = Array.isArray(d.schedules) ? d.schedules : [];
+    renderSchedulesUi();
+  } catch (e) { /* ignore */ }
+  finally { schedFetchInFlight = false; }
+}
+
+function schedulePollMs() {
+  return 30000;
+}
+
+function scheduleSchedulesPoll() {
+  if (schedPollTimer) clearInterval(schedPollTimer);
+  schedPollTimer = setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    refreshSchedules(false);
+  }, schedulePollMs());
+}
+
+function buildScheduleDatetime() {
+  const date = $('sched-date').value;
+  const time = $('sched-time').value;
+  if (!date || !time) return null;
+  return date + 'T' + time + ':00';
+}
+
+$('sched-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = schedulePayloadFromForm();
+  if (!payload.title || !payload.datetime) {
+    toast('TITLE AND DATE/TIME REQUIRED');
+    return;
+  }
+  try {
+    const editing = schedEditingId;
+    const url = editing
+      ? '/api/schedules/' + encodeURIComponent(editing)
+      : '/api/schedules';
+    const r = await fetch(url, {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      toast(editing ? '>>> UPDATE FAILED' : '>>> ADD FAILED');
+      return;
+    }
+    flashSchedSaved();
+    toast(editing ? '>>> SCHEDULE UPDATED' : '>>> SCHEDULE ADDED');
+    $('sched-title').value = '';
+    $('sched-description').value = '';
+    clearSchedEditMode();
+    await refreshSchedules(true);
+  } catch (err) {
+    toast('>>> SAVE FAILED');
+  }
+});
+
+async function deleteSchedule(id) {
+  if (!id || !confirm('DELETE THIS SCHEDULED EVENT?')) return;
+  if (schedEditingId === id) clearSchedEditMode();
+  try {
+    const r = await fetch('/api/schedules/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    toast(d.ok ? '>>> DELETED' : '>>> DELETE FAILED');
+    if (d.ok) await refreshSchedules(true);
+  } catch (e) {
+    toast('>>> DELETE FAILED');
+  }
+}
+
+$('sched-prev').onclick = async () => {
+  schedViewMonth -= 1;
+  if (schedViewMonth < 0) { schedViewMonth = 11; schedViewYear -= 1; }
+  await ensureHolidaysYear(schedViewYear);
+  renderScheduleCalendar();
+};
+$('sched-next').onclick = async () => {
+  schedViewMonth += 1;
+  if (schedViewMonth > 11) { schedViewMonth = 0; schedViewYear += 1; }
+  await ensureHolidaysYear(schedViewYear);
+  renderScheduleCalendar();
+};
+
+document.querySelectorAll('.sched-filter').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    schedCalFilter = btn.getAttribute('data-filter') || 'all';
+    document.querySelectorAll('.sched-filter').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    renderScheduleCalendar();
+  });
+});
+
+$('sched-tpl-anniversary').onclick = () => applySchedQuickTemplate('anniversary');
+$('sched-tpl-birthday').onclick = () => applySchedQuickTemplate('birthday');
+$('sched-tpl-reminder').onclick = () => applySchedQuickTemplate('reminder');
+
+$('sched-today').onclick = () => {
+  const now = new Date();
+  schedViewYear = now.getFullYear();
+  schedViewMonth = now.getMonth();
+  setSchedSelectedDate(todayDateKey(), { focusForm: true });
+  if (typeof $('sched-date').showPicker === 'function') {
+    try { $('sched-date').showPicker(); } catch (err) { /* ignore */ }
+  }
+};
+
+$('sched-date').addEventListener('change', () => {
+  const v = $('sched-date').value;
+  if (!v) return;
+  schedSelectedDate = v;
+  const parts = v.split('-').map(Number);
+  if (parts.length === 3) {
+    schedViewYear = parts[0];
+    schedViewMonth = parts[1] - 1;
+    renderScheduleCalendar();
+  }
+});
+
+document.querySelector('label[for="sched-date"]').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  const inp = $('sched-date');
+  if (typeof inp.showPicker === 'function') {
+    try { inp.showPicker(); return; } catch (err) { /* fall through */ }
+  }
+  inp.focus();
+});
+
+$('sched-cal-grid').addEventListener('click', (ev) => {
+  const cell = ev.target.closest('[data-date]');
+  if (!cell) return;
+  const key = cell.getAttribute('data-date');
+  if (cell.classList.contains('other-month')) {
+    const parts = key.split('-').map(Number);
+    if (parts.length === 3) {
+      schedViewYear = parts[0];
+      schedViewMonth = parts[1] - 1;
+    }
+  }
+  setSchedSelectedDate(key, { focusForm: true });
+});
+
+$('sched-cal-grid').addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const cell = ev.target.closest('[data-date]');
+  if (!cell) return;
+  ev.preventDefault();
+  cell.click();
+});
+
+document.querySelectorAll('.sched-time-preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    $('sched-time').value = btn.getAttribute('data-time');
+    $('sched-time').focus();
+  });
+});
+
+$('sched-cancel-edit').onclick = () => {
+  clearSchedEditMode();
+  $('sched-title').value = '';
+  $('sched-description').value = '';
+};
+
+$('sched-test-notify').onclick = async function testNotify() {
+  const btn = $('sched-test-notify');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '[ ... ]';
+  try {
+    const r = await fetch('/api/notify/test', { method: 'POST' });
+    const d = await r.json();
+    if (r.status === 503) {
+      toast('CONFIGURE NTFY_URL ON PI');
+    } else if (d.ok) {
+      toast('>>> TEST NOTIFY SENT');
+    } else {
+      toast('>>> NOTIFY FAILED');
+    }
+  } catch (e) {
+    toast('>>> NOTIFY FAILED');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+};
+
+initScheduleFormDefaults();
+renderScheduleCalendar();
+refreshSchedules(true);
+scheduleSchedulesPoll();
+
+$('device-picker').addEventListener('change', () => {
+  selectedDeviceId = $('device-picker').value;
+  updateDeviceCardFromSelection(getSelectedDevice());
+});
+$('btn-lan-scan').onclick = () => runLanScan($('btn-lan-scan'));
+
+refreshStatus(true);
+refreshHealth();
+scheduleStatusPoll();
+scheduleHealthPoll();
+</script>
+</body>
+</html>
