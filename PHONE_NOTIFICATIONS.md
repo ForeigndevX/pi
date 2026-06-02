@@ -39,3 +39,9 @@ After updating icons on GitHub, wait ~2 minutes for CDN cache or push a new comm
 ## JPEG alternative
 
 If a device still mis-renders PNG previews, host `wolapp-notify-512.jpg` (generated alongside PNG) and set `NTFY_ATTACH_URL` to the `.jpg` URL.
+
+## GitHub CDN lag
+
+`raw.githubusercontent.com/.../main/...` can stay cached for several minutes after a push. Until `Content-Length` matches the new PNG (~3391 bytes for 512px), iOS may still get the old black image.
+
+**Workaround:** pin `NTFY_ATTACH_URL` / `NTFY_ICON_URL` to a commit SHA, e.g. `https://raw.githubusercontent.com/ForeigndevX/pi/04d1c30/static/wolapp-notify-512.png`, then switch back to `/main/` once CDN catches up.
